@@ -9,6 +9,7 @@ Stack de tecnologías para implementar un Data Lakehouse en un entorno on-premis
 
 Cada componente está configurado para utilizar almacenamiento persistente en un SSD local, asegurando un rendimiento óptimo para las operaciones de lectura y escritura de datos
 
+### Consideraciones
 #### Crear usuario en JupyterHub
 ```bash
 # Entrar al contenedor de JupyterHub
@@ -22,4 +23,30 @@ passwd admin
 
 # Salir del contenedor
 exit
+```
+
+### Docker
+```bash
+# Bajar todos los servicios
+sudo docker-compose down
+# Bajar todos los servicios y eliminar los volúmenes (¡cuidado, se perderán los datos!)
+sudo docker-compose down -v
+# Bajar todos los servicios, volúmenes e imágenes 
+sudo docker-compose down -v --rmi all
+
+# Levantar solo Postgres primero para verificar la inicialización
+sudo docker compose up -d postgres
+# Subir todos los servicios start and build
+sudo docker-compose up -d
+
+#  Ver todos los logs
+sudo docker-compose logs -f
+# Ver logs de un servicio específico
+sudo docker-compose logs -f jupyterhub
+sudo docker compose logs -f postgres
+
+# Ver contenedores en ejecución
+sudo docker ps
+# ver todos los contenedores, incluyendo los detenidos
+sudo docker ps -a
 ```
