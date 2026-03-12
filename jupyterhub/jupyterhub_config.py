@@ -19,6 +19,6 @@ c.Spawner.notebook_dir = '/home/{username}'
 c.JupyterHub.ip = '0.0.0.0'
 c.JupyterHub.port = 8000
 
-# Deshabilitar SSL (usar nginx/proxy en producción)
-c.JupyterHub.ssl_cert = ''
-c.JupyterHub.ssl_key = ''
+# Sin SSL directo (se usará proxy/Nginx si es producción)
+# c.JupyterHub.ssl_cert = '/srv/jupyterhub/fullchain.pem'
+# c.JupyterHub.ssl_key = '/srv/jupyterhub/privkey.pem'
