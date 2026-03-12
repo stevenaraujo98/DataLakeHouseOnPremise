@@ -8,4 +8,18 @@ Stack de tecnologías para implementar un Data Lakehouse en un entorno on-premis
 - Streamlit: Framework para crear aplicaciones web interactivas de datos.
 
 Cada componente está configurado para utilizar almacenamiento persistente en un SSD local, asegurando un rendimiento óptimo para las operaciones de lectura y escritura de datos
-.
+
+#### Crear usuario en JupyterHub
+```bash
+# Entrar al contenedor de JupyterHub
+sudo docker exec -it ds_jupyterhub bash
+
+# Crear el usuario admin (el que definiste en JUPYTERHUB_ADMIN)
+useradd -m admin
+
+# Asignarle una contraseña (te la pedirá dos veces)
+passwd admin
+
+# Salir del contenedor
+exit
+```

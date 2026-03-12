@@ -129,7 +129,7 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:?MINIO_ROOT_USER no definido} ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD no definido} &&;
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
       mc mb --ignore-existing myminio/raw-data;
       mc mb --ignore-existing myminio/processed-data;
       mc mb --ignore-existing myminio/models;
