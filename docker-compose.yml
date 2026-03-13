@@ -45,14 +45,17 @@ services:
     container_name: ds_mlflow
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER no definido}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD no definido}
-    volumes:
-      - /data/datascience/mlflow:/mlflow
-    ports:
-      - "5000:5000"
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_BACKEND_STORE_URI=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+    command: >
+      sh -c "mlflow server 
+      --host 0.0.0.0 
+      --port 5000 
+      --backend-store-uri postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/mlflow 
+      --default-artifact-root s3://artifacts/ 
+      --serve-artifacts"
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,23 +102,20 @@ services:
       - ds_network
 
   streamlit:
-    image: python:3.11-slim
+    build: ./dashboards
     container_name: ds_streamlit
     restart: unless-stopped
-    working_dir: /app
-    command: >
-      bash -c "pip install streamlit polars duckdb plotly boto3 mlflow --quiet &&
-               streamlit run app.py --server.address=0.0.0.0 --server.port=8501"
     volumes:
-      - ./dashboards:/app  # código del dashboard
-      - /data/datascience/minio:/data/local  # acceso local a datos
+      - ./dashboards:/app
+      - /data/datascience/minio:/data/local
     ports:
       - "8501:8501"
     environment:
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER no definido}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD no definido}
-      MLFLOW_TRACKING_URI: http://mlflow:5000
+      - SERVER_IP=${SERVER_IP}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     depends_on:
       - minio
       - mlflow
