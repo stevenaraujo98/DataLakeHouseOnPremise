@@ -40,9 +40,9 @@ sudo docker compose up -d postgres
 sudo docker-compose up -d
 
 #  Ver todos los logs
-sudo docker-compose logs -f
+sudo docker compose logs -f
 # Ver logs de un servicio específico
-sudo docker-compose logs -f jupyterhub
+sudo docker compose logs -f jupyterhub
 sudo docker compose logs -f postgres
 
 # Ver contenedores en ejecución

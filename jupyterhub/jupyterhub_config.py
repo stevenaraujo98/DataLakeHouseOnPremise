@@ -6,6 +6,9 @@ c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
 # Spawner
 c.JupyterHub.spawner_class = 'simple'
 
+# Crear automáticamente usuarios del sistema si no existen
+c.LocalAuthenticator.create_system_users = True
+
 # Admin users
 c.Authenticator.admin_users = {'admin'}
 
