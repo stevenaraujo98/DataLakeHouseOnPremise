@@ -63,6 +63,8 @@ Nota: Los datos en /data/datascience/postgres, /data/datascience/minio, etc. nun
 
 ##### Reiniciar sin perder nada
 Se conserva imagenes, datos. Reinicio normal. Cambios en docker-compose.yml, no se necesita reconstruir imágenes.
+- cd /home/manager/DataLakeHouseOnPremise
+
 ```bash
 cd ~/DataLakeHouseOnPremise
 sudo docker compose down
@@ -115,14 +117,19 @@ cd ~/DataLakeHouseOnPremise
 sudo docker compose down -v --rmi all
 
 # Borrar datos persistentes del SSD
-sudo rm -rf /data/datascience/postgres/*
 sudo rm -rf /data/datascience/minio/*
 sudo rm -rf /data/datascience/jupyterhub/*
 sudo rm -rf /data/datascience/mlflow/*
+sudo rm -rf /data/datascience/postgres/*
+sudo rm -rf /data/datascience/postgres
+sudo mkdir -p /data/datascience/postgres
+sudo chmod 777 /data/datascience/postgres
 
 # Reconstruir imágenes y levantar desde cero
 sudo docker compose build --no-cache
 sudo docker compose up -d
+# o
+sudo docker compose up -d --build
 ```
 
 
