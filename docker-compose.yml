@@ -72,7 +72,7 @@ services:
     restart: unless-stopped
     command: prefect server start --host 0.0.0.0
     environment:
-      PREFECT_SERVER_DATABASE_CONNECTION_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER no definido}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}@postgres:5432/prefect
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER no definido}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}@postgres:5432/prefect
       PREFECT_UI_API_URL: http://${SERVER_IP:-localhost}:4200/api
     volumes:
       - /data/datascience/prefect:/root/.prefect

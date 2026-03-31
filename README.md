@@ -47,9 +47,16 @@ sudo docker compose up -d --build
 
 #  Ver todos los logs
 sudo docker compose logs -f
+
 # Ver logs de un servicio específico
 sudo docker compose logs -f jupyterhub
 sudo docker compose logs -f postgres
+sudo docker compose logs -f prefect
+
+sudo docker logs -f ds_jupyterhub
+sudo docker logs -f ds_postgres
+sudo docker logs -f ds_prefect
+
 sudodocker compose logs -f mlflow
 
 # Ver contenedores en ejecución
@@ -158,4 +165,10 @@ sudo docker compose logs -f postgres
 sudo docker exec -it ds_postgres psql -U postgres -c "\l"
 ```
 
-
+### Servidores levantados
+- http://192.168.10.59:8501/
+- http://192.168.10.59:5000/
+- http://192.168.10.59:9001/
+- http://192.168.10.59:4200/
+- http://192.168.10.59:8000/
+- 

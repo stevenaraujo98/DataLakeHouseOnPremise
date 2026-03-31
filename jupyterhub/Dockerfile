@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir \
     scikit-learn \
     prefect
 
+COPY jupyterhub_config.py /etc/jupyterhub/jupyterhub_config.py
+
 EXPOSE 8000
 
-CMD ["jupyterhub", "-f", "/srv/jupyterhub/jupyterhub_config.py"]
+CMD ["jupyterhub", "-f", "/etc/jupyterhub/jupyterhub_config.py"]
