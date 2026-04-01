@@ -25,6 +25,75 @@ passwd admin
 exit
 ```
 
+### Linux
+#### Ver almacenamiento
+```
+sudo du -sh /var/lib/
+sudo du -h --max-depth=1 /var/lib/containerd/
+sudo du -h --max-depth=1 /var/lib
+sudo du -h --max-depth=1 /
+
+sudo du -sh /data/
+sudo du -h --max-depth=1 /data/
+
+sudo df -h
+```
+
+#### Liberar espacio
+```
+sudo systemctl stop docker docker.socket containerd
+sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt-get autoremove -y
+
+<!-- # Desmontar todo lo relacionado con overlay y docker -->
+sudo areas=$(mount | grep -E 'docker|containerd' | awk '{print $3}')
+for m in $areas; do sudo umount -l $m; done
+
+<!-- # Ahora borra las carpetas físicas -->
+sudo rm -rf /var/lib/docker
+sudo rm -rf /var/lib/containerd
+sudo rm -rf /etc/docker/daemon.json
+
+<!-- Verificar -->
+df -h /
+<!-- (El parámetro -x evita que du cuente otros discos como /data). -->
+sudo du -hxd 1 / | sort -h
+```
+
+#### Cambiar imagenes de docker a /data
+```
+<!-- Reinstalar Docker -->
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+<!-- Crea el nuevo directorio -->
+sudo mkdir -p /data/docker
+<!-- Configura el daemon -->
+sudo nano /etc/docker/daemon.json
+<!-- Pegar -->
+{
+  "data-root": "/data/docker"
+}
+<!-- Reinicia y verifica -->
+sudo systemctl restart docker
+# Verifica que la ruta cambió
+docker info | grep "Docker Root Dir"
+<!-- Debería decir: Docker Root Dir: /data/docker -->
+```
+
+#### Cambiar todo el codigo a /data
+```
+sudo mv ~/DataLakeHouseOnPremise /data/
+<!-- Cambiar al nuevo directorio -->
+cd /data/DataLakeHouseOnPremise
+<!-- Corregir permisos (para que tu usuario 'manager' pueda editar sin sudo) -->
+sudo chown -R manager:manager /data/DataLakeHouseOnPremise
+<!-- Asegurar que las carpetas de datos existan en el SSD -->
+sudo mkdir -p /data/datascience/{postgres,minio,prefect,jupyterhub,notebooks}
+sudo chmod -R 775 /data/datascience/
+sudo chown -R manager:manager /data/datascience/
+```
+
 ### Docker
 ```bash
 # Bajar todos los servicios

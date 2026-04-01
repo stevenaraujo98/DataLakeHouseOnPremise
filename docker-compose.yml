@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:15
+    image: postgres:18
     container_name: ds_postgres
     restart: unless-stopped
     environment:
@@ -67,7 +67,7 @@ services:
       - ds_network
 
   prefect:
-    image: prefecthq/prefect:2-latest
+    image: prefecthq/prefect:3-latest
     container_name: ds_prefect
     restart: unless-stopped
     command: prefect server start --host 0.0.0.0

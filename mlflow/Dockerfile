@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir \
 
 EXPOSE 5000
 
-ENV MLFLOW_BACKEND_STORE_URI=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/mlflow
 ENV MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://artifacts/
 
 CMD ["sh", "-c", "mlflow server \
