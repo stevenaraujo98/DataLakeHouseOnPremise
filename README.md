@@ -249,8 +249,9 @@ Conectarse a base de datos con las credenciales env.
 
 En JupyterHub crear el usuario admin en http://192.168.10.59:8000/hub/signup.  
 Usar librerias:
-- %pip install -qqq pandas scikit-learn mlflow boto3 s3fs
-- !pip install -q --no-input pandas scikit-learn mlflow boto3 s3fs  
+- %pip install -qqq librerias
+- !pip install -q --no-input librerias  
+Ya por defecto viene preinstalado "pandas scikit-learn mlflow boto3 s3fs"  
 
 
 Acceder al MinIO http://192.168.10.59:9001/browser/artifacts
