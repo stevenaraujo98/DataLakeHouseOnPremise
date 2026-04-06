@@ -22,6 +22,9 @@ c.JupyterHub.cookie_secret_file = '/srv/jupyterhub/jupyterhub_cookie_secret'
 # Directorio base de notebooks
 c.Spawner.notebook_dir = '/home/{username}'
 
+# Permitir ejecución como root dentro del contenedor
+c.Spawner.args = ['--allow-root']
+
 # IP y puerto
 c.JupyterHub.ip = '0.0.0.0'
 c.JupyterHub.port = 8000
