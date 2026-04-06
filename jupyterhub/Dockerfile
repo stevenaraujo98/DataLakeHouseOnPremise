@@ -9,19 +9,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
-    jupyterhub \
+    "jupyterhub==4.0.*" \
     jupyterlab \
     notebook \
+    ipykernel \
     jupyterhub-nativeauthenticator \
-    polars \
+    polars-lts-cpu \
     duckdb \
-    mlflow \
+    "mlflow>=2.10,<3" \
     boto3 \
     s3fs \
     plotly \
     pandas \
     scikit-learn \
     prefect
+
+# Register the kernel so Jupyter can find it
+RUN python -m ipykernel install --sys-prefix
 
 COPY jupyterhub_config.py /etc/jupyterhub/jupyterhub_config.py
 
