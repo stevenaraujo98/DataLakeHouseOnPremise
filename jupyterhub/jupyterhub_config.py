@@ -12,6 +12,13 @@ c.Authenticator.admin_users = {'admin'}
 # Permitir que cualquier usuario registrado se loguee sin aprobación manual
 c.NativeAuthenticator.open_signup = True
 
+# Autorizar a todos los usuarios registrados (necesario en JupyterHub 4.x)
+c.Authenticator.allow_all = True
+
+# Base de datos en volumen persistente (sobrevive reinicios)
+c.JupyterHub.db_url = 'sqlite:////srv/jupyterhub/jupyterhub.sqlite'
+c.JupyterHub.cookie_secret_file = '/srv/jupyterhub/jupyterhub_cookie_secret'
+
 # Directorio base de notebooks
 c.Spawner.notebook_dir = '/home/{username}'
 
