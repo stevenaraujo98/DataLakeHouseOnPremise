@@ -242,3 +242,32 @@ sudo docker exec -it ds_postgres psql -U postgres -c "\l"
 - http://192.168.10.59:4200/
 - http://192.168.10.59:8000/
 - 
+
+### Funcionalidad
+Conectarse a base de datos con las credenciales env.  
+
+
+En JupyterHub crear el usuario admin en http://192.168.10.59:8000/hub/signup.  
+Usar librerias:
+- %pip install -qqq pandas scikit-learn mlflow boto3 s3fs
+- !pip install -q --no-input pandas scikit-learn mlflow boto3 s3fs  
+
+
+Acceder al MinIO http://192.168.10.59:9001/browser/artifacts
+Puerto 9000 vs 9001 en MinIO  
+Puerto	Uso  
+9000	API S3 — para operaciones programáticas (boto3, mc, SDK)  
+9001	Consola web (UI) — interfaz de administración en el navegador  
+
+```
+import boto3
+
+s3 = boto3.client(
+    's3',
+    endpoint_url=os.environ["MINIO_ENDPOINT"],
+    aws_access_key_id=os.environ["MINIO_ACCESS_KEY"], 
+    aws_secret_access_key=os.environ["MINIO_SECRET_KEY"]
+)
+
+s3.upload_file('data.csv', 'raw-data', 'data.csv')
+```

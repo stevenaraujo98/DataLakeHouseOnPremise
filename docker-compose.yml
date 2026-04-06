@@ -98,6 +98,9 @@ services:
       - "8000:8000"
     environment:
       JUPYTERHUB_ADMIN: ${JUPYTERHUB_ADMIN:-admin}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_ENDPOINT: http://minio:9000
     depends_on:
       - postgres
     networks:

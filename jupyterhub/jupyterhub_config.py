@@ -25,6 +25,14 @@ c.Spawner.notebook_dir = '/home/{username}'
 # Permitir ejecución como root dentro del contenedor
 c.Spawner.cmd = ['jupyterhub-singleuser', '--allow-root']
 
+# Reenviar variables de entorno de MinIO a los kernels de notebook
+import os
+c.Spawner.environment = {
+    'MINIO_ENDPOINT':   os.environ.get('MINIO_ENDPOINT', ''),
+    'MINIO_ACCESS_KEY': os.environ.get('MINIO_ACCESS_KEY', ''),
+    'MINIO_SECRET_KEY': os.environ.get('MINIO_SECRET_KEY', ''),
+}
+
 # IP y puerto
 c.JupyterHub.ip = '0.0.0.0'
 c.JupyterHub.port = 8000
