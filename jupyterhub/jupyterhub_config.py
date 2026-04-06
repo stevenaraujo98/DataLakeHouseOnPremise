@@ -1,19 +1,16 @@
 c = get_config()
 
-# Autenticación simple (cambiar a LDAP en producción)
-c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
+# Autenticación nativa (credenciales en base de datos persistente)
+c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
 
 # Spawner
 c.JupyterHub.spawner_class = 'simple'
 
-# Crear automáticamente usuarios del sistema si no existen
-c.LocalAuthenticator.create_system_users = True
-
-# Admin users
+# Admin users (pueden registrarse en /hub/signup y se aprueban automáticamente)
 c.Authenticator.admin_users = {'admin'}
 
-# Permitir que cualquier usuario del sistema se loguee
-c.PAMAuthenticator.open_sessions = False
+# Permitir que cualquier usuario registrado se loguee sin aprobación manual
+c.NativeAuthenticator.open_signup = True
 
 # Directorio base de notebooks
 c.Spawner.notebook_dir = '/home/{username}'

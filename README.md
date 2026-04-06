@@ -34,6 +34,7 @@ sudo du -h --max-depth=1 /var/lib
 sudo du -h --max-depth=1 /
 
 sudo du -sh /data/
+sudo du -sh /data/*
 sudo du -h --max-depth=1 /data/
 
 sudo df -h

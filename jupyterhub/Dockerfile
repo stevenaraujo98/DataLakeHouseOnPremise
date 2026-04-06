@@ -4,6 +4,7 @@ RUN pip install --no-cache-dir \
     jupyterhub \
     jupyterlab \
     notebook \
+    jupyterhub-nativeauthenticator \
     polars \
     duckdb \
     mlflow \
