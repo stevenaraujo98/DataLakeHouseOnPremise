@@ -22,6 +22,15 @@ c.JupyterHub.cookie_secret_file = '/srv/jupyterhub/jupyterhub_cookie_secret'
 # Directorio base de notebooks
 c.Spawner.notebook_dir = '/home/{username}'
 
+# Crear el directorio home del usuario si no existe antes de arrancar el servidor
+async def pre_spawn_hook(spawner):
+    import os
+    username = spawner.user.name
+    home_dir = f'/home/{username}'
+    os.makedirs(home_dir, exist_ok=True)
+
+c.Spawner.pre_spawn_hook = pre_spawn_hook
+
 # Permitir ejecución como root dentro del contenedor
 c.Spawner.cmd = ['jupyterhub-singleuser', '--allow-root']
 

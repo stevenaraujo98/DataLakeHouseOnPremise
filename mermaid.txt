@@ -1,0 +1,90 @@
+graph TD
+    subgraph "Fuentes de Datos Externas"
+        DB_EXT[(Base de Datos Universidad)]
+        CSV[Archivos CSV Externos]
+    end
+
+    subgraph "Servidor On-Prem (Docker Compose)"
+        
+        subgraph "Desarrollo y Orquestación"
+            JH[JupyterHub] -- Desarrolla/Prueba --> JOBS[Flows / Jobs]
+            PH[Prefect Server] -- Orquesta/Monitorea --> JOBS
+        end
+        
+        subgraph "Procesamiento"
+            JOBS -- Motor de Datos --> PL[Polars / DuckDB]
+        end
+
+        subgraph "Presentación"
+            ST[Streamlit Dashboards]
+        end
+
+        subgraph "Machine Learning Tracking"
+            MLF[MLflow Server]
+        end
+
+        subgraph "Capa de Persistencia"
+            PG[(PostgreSQL 17)]
+            PG_DB_M[(DB: mlflow)] --- PG
+            PG_DB_P[(DB: prefect)] --- PG
+            
+            MIO[(MinIO S3)]
+            MIO --- B1[Bucket: raw-data]
+            MIO --- B2[Bucket: processed-data]
+            MIO --- B3[Bucket: models]
+            MIO --- B4[Bucket: artifacts]
+        end
+    end
+
+    %% Flujo de Datos Externos
+    DB_EXT -->|Ingesta| JOBS
+    CSV -->|Ingesta| JOBS
+
+    %% Relaciones de Almacenamiento y Tracking
+    JOBS -- Lee/Escribe Datos --> MIO
+    JOBS -- Registra Métricas/Modelos --> MLF
+    
+    %% Relaciones Backend (Reflejando las variables de entorno)
+    PH -- Guarda metadatos --> PG_DB_P
+    MLF -- Guarda metadatos --> PG_DB_M
+    MLF -- Guarda modelos --> B4
+    
+    %% Relaciones de Presentación (Streamlit)
+    ST -- Carga modelos/datos --> MIO
+    ST -- Consulta registro --> MLF
+    
+    %% Conexiones desde JupyterHub (Basado en el entorno)
+    JH -.->|Tracking URI| MLF
+    JH -.->|S3 API| MIO
+    JH -.->|API| PH
+
+
+
+
+%%
+graph TD 
+    subgraph "Fuentes de Datos" 
+        DB[(Base de Datos Universidad)] 
+        CSV[Archivos CSV Externos] 
+    end 
+    subgraph "Servidor On-Prem (Docker)" 
+        subgraph "Orquestación y UI" 
+            PH[Prefect Server] -- Gestiona --> JOBS[Flows / Jobs] 
+            JH[JupyterHub] -- Desarrollo --> JOBS 
+        end 
+        subgraph "Procesamiento (In-Memory)" 
+            JOBS -- Usa --> PL[Polars / DuckDB] 
+        end
+        subgraph "Storage (S3 API)" 
+            MIO[(MinIO)] 
+            MIO --- RAW[Bucket: Raw / CSV] 
+            MIO --- PROC[Bucket: Processed / Parquet] 
+        end 
+        subgraph "Tracking" 
+            MLF[MLflow] -- Registra --> JOBS 
+        end 
+    end 
+    DB --> JOBS 
+    CSV --> JOBS 
+    JOBS -- Lee/Escribe --> MIO 
+%%

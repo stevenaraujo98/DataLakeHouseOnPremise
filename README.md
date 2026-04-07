@@ -264,6 +264,7 @@ Usar librerias:
 - !pip install -q --no-input librerias  
 Ya por defecto viene preinstalado "pandas scikit-learn mlflow boto3 s3fs"  
 
+---
 
 Acceder al MinIO http://192.168.10.59:9001/browser/artifacts
 Puerto 9000 vs 9001 en MinIO  
@@ -284,6 +285,13 @@ s3 = boto3.client(
 s3.upload_file('data.csv', 'raw-data', 'data.csv')
 ```
 
+fecha/lote/modelo
+- s3://raw-data/bronze/...
+- s3://processed-data/silver/...
+- s3://processed-data/gold/...
+- s3://processed-data/features/customer_features/v2026_03_13/...
+
+---
 
 MlFlow 
 ```
@@ -309,3 +317,6 @@ with mlflow.start_run():
 
     mlflow.sklearn.log_model(model, "model")
 ```
+
+---
+Para Streamlit solo se muestra en el puerto 8501
