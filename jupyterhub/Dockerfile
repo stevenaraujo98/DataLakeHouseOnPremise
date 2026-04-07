@@ -22,7 +22,8 @@ RUN pip install --no-cache-dir \
     plotly \
     pandas \
     scikit-learn \
-    prefect
+    prefect \
+    streamlit
 
 # Register the kernel so Jupyter can find it
 RUN python -m ipykernel install --sys-prefix

@@ -214,6 +214,9 @@ sudo chmod 777 /data/datascience/postgres
 sudo docker compose build --no-cache
 sudo docker compose up -d
 # o
+# limpar cache
+sudo docker system prune -a --volumes
+# compilar y ejecutar 
 sudo docker compose up -d --build
 ```
 

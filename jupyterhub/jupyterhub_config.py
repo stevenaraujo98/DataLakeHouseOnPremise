@@ -34,6 +34,8 @@ c.Spawner.environment = {
     'MLFLOW_S3_ENDPOINT_URL': os.environ.get('MLFLOW_S3_ENDPOINT_URL', ''),
     # URI del servidor MLflow
     'MLFLOW_TRACKING_URI':   os.environ.get('MLFLOW_TRACKING_URI', ''),
+    # URL del servidor Prefect dedicado
+    'PREFECT_API_URL':        os.environ.get('PREFECT_API_URL', ''),
     # Silenciar advertencia de Git en MLflow
     'GIT_PYTHON_REFRESH':    'quiet',
 }
