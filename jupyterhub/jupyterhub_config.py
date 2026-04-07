@@ -25,12 +25,17 @@ c.Spawner.notebook_dir = '/home/{username}'
 # Permitir ejecución como root dentro del contenedor
 c.Spawner.cmd = ['jupyterhub-singleuser', '--allow-root']
 
-# Reenviar variables de entorno de MinIO a los kernels de notebook
+# Reenviar variables de entorno de MinIO y MLflow a los kernels de notebook
 import os
 c.Spawner.environment = {
-    'MINIO_ENDPOINT':   os.environ.get('MINIO_ENDPOINT', ''),
-    'MINIO_ACCESS_KEY': os.environ.get('MINIO_ACCESS_KEY', ''),
-    'MINIO_SECRET_KEY': os.environ.get('MINIO_SECRET_KEY', ''),
+    # Credenciales S3-compatibles requeridas por MLflow/boto3
+    'AWS_ACCESS_KEY_ID':     os.environ.get('AWS_ACCESS_KEY_ID', ''),
+    'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY', ''),
+    'MLFLOW_S3_ENDPOINT_URL': os.environ.get('MLFLOW_S3_ENDPOINT_URL', ''),
+    # URI del servidor MLflow
+    'MLFLOW_TRACKING_URI':   os.environ.get('MLFLOW_TRACKING_URI', ''),
+    # Silenciar advertencia de Git en MLflow
+    'GIT_PYTHON_REFRESH':    'quiet',
 }
 
 # IP y puerto

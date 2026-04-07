@@ -41,6 +41,14 @@ sudo df -h
 ```
 
 #### Liberar espacio
+Primera solucion:  
+Este comando eliminará todos los contenedores detenidos, redes no usadas e imágenes sin contenedores asociados.
+```
+sudo docker system prune -a --volumes
+```
+
+
+Desinstalando Docker de raiz:  
 ```
 sudo systemctl stop docker docker.socket containerd
 sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -265,10 +273,36 @@ import boto3
 
 s3 = boto3.client(
     's3',
-    endpoint_url=os.environ["MINIO_ENDPOINT"],
-    aws_access_key_id=os.environ["MINIO_ACCESS_KEY"], 
-    aws_secret_access_key=os.environ["MINIO_SECRET_KEY"]
+    endpoint_url=os.environ["MLFLOW_S3_ENDPOINT_URL"],
+    aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"], 
+    aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"]
 )
 
 s3.upload_file('data.csv', 'raw-data', 'data.csv')
+```
+
+
+MlFlow 
+```
+import mlflow
+import mlflow.sklearn
+from sklearn.linear_model import LinearRegression
+
+mlflow.set_tracking_uri("http://mlflow:5000")
+mlflow.set_experiment("demo_experiment") # lo crea
+
+# Leer desde MinIO
+df = pd.read_csv("data.csv")
+
+X = df[["x", "y"]]
+y = df["target"]
+
+with mlflow.start_run():
+    model = LinearRegression()
+    model.fit(X, y)
+
+    mlflow.log_param("model_type", "LinearRegression")
+    mlflow.log_metric("score", model.score(X, y))
+
+    mlflow.sklearn.log_model(model, "model")
 ```
