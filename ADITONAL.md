@@ -5,19 +5,19 @@
 Todos los comandos asumen que estás parado en la raíz del proyecto.
 
 ```bash
-docker compose ps
-docker compose logs -f
+sudo docker compose ps
+sudo docker compose logs -f
 
 # General
-docker exec -it ds_postgres bash
-docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d postgres
-docker exec -it ds_jupyterhub bash
-docker exec -it ds_minio sh
-docker exec -it ds_mlflow sh
-docker exec -it ds_prefect bash
-docker exec -it ds_streamlit sh
-docker inspect ds_postgres --format '{{json .Mounts}}'
-docker inspect ds_jupyterhub --format '{{json .Mounts}}'
+sudo docker exec -it ds_postgres bash
+sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d postgres
+sudo docker exec -it ds_jupyterhub bash
+sudo docker exec -it ds_minio sh
+sudo docker exec -it ds_mlflow sh
+sudo docker exec -it ds_prefect bash
+sudo docker exec -it ds_streamlit sh
+sudo docker inspect ds_postgres --format '{{json .Mounts}}'
+sudo docker inspect ds_jupyterhub --format '{{json .Mounts}}'
 ```
 
 
@@ -25,9 +25,9 @@ docker inspect ds_jupyterhub --format '{{json .Mounts}}'
 ### PostgreSQL
 
 ```bash
-docker exec -it ds_postgres bash
-docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d postgres
-docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub
+sudo docker exec -it ds_postgres bash
+sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d postgres
+sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub
 ```
 
 Consultas útiles dentro de `psql`:
@@ -42,7 +42,7 @@ SELECT count(*) FROM users;
 ### MinIO
 
 ```bash
-docker exec -it ds_minio sh
+sudo docker exec -it ds_minio sh
 ls -lah /data
 ```
 
@@ -51,7 +51,7 @@ También puedes revisar el contenido desde la consola web en `http://SERVER_IP:9
 ### JupyterHub
 
 ```bash
-docker exec -it ds_jupyterhub bash
+sudo docker exec -it ds_jupyterhub bash
 ls -lah /srv/jupyterhub
 ls -lah /home
 env | sort
@@ -60,21 +60,21 @@ env | sort
 ### MLflow
 
 ```bash
-docker exec -it ds_mlflow sh
+sudo docker exec -it ds_mlflow sh
 env | sort
 ```
 
 ### Prefect
 
 ```bash
-docker exec -it ds_prefect bash
+sudo docker exec -it ds_prefect bash
 prefect version
 ```
 
 ### Streamlit
 
 ```bash
-docker exec -it ds_streamlit sh
+sudo docker exec -it ds_streamlit sh
 ls -lah /app
 ls -lah /data/local
 ```
@@ -82,17 +82,17 @@ ls -lah /data/local
 ## Inspeccionar mounts y variables
 
 ```bash
-docker inspect ds_postgres
-docker inspect ds_jupyterhub
-docker inspect ds_minio
+sudo docker inspect ds_postgres
+sudo docker inspect ds_jupyterhub
+sudo docker inspect ds_minio
 ```
 
 Si quieres ver solo los mounts:
 
 ```bash
-docker inspect ds_postgres --format '{{json .Mounts}}'
-docker inspect ds_jupyterhub --format '{{json .Mounts}}'
-docker inspect ds_minio --format '{{json .Mounts}}'
+sudo docker inspect ds_postgres --format '{{json .Mounts}}'
+sudo docker inspect ds_jupyterhub --format '{{json .Mounts}}'
+sudo docker inspect ds_minio --format '{{json .Mounts}}'
 ```
 
 ## JupyterHub usando PostgreSQL
@@ -102,15 +102,15 @@ JupyterHub quedó configurado para usar la base `jupyterhub` de PostgreSQL media
 Para aplicar el cambio:
 
 ```bash
-docker compose build jupyterhub
-docker compose up -d jupyterhub
-docker compose logs -f jupyterhub
+sudo docker compose build jupyterhub
+sudo docker compose up -d jupyterhub
+sudo docker compose logs -f jupyterhub
 ```
 
 Si quieres confirmar desde Postgres:
 
 ```bash
-docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub -c "\dt"
+sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub -c "\dt"
 ```
 
 Nota: si ya tenías usuarios en el archivo SQLite anterior, no se migran solos a Postgres. Ese archivo quedará como historial local hasta que decidas migrarlo o descartarlo.
@@ -122,9 +122,9 @@ Con `NativeAuthenticator`, el flujo más simple es registrar el usuario desde `h
 Si además necesitas crear el usuario de sistema dentro del contenedor:
 
 ```bash
-docker exec -it ds_jupyterhub useradd -m -s /bin/bash admin
-docker exec -it ds_jupyterhub sh -c "echo 'admin:contrasenia123' | chpasswd"
-docker compose restart jupyterhub
+sudo docker exec -it ds_jupyterhub useradd -m -s /bin/bash admin
+sudo docker exec -it ds_jupyterhub sh -c "echo 'admin:contrasenia123' | chpasswd"
+sudo docker compose restart jupyterhub
 ```
 
 ## Ver si los puertos  estan ocupados en el server

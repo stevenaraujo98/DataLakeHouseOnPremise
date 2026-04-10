@@ -177,17 +177,17 @@ sudo docker compose up -d --build streamlit
 
 Ejemplo de cambio en docker-compose.yml, jupyterhub_config.py y Dockerfile para jupyterhub 
 ```bash
-docker compose build jupyterhub
-docker compose up -d jupyterhub
-docker compose logs -f jupyterhub
-docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub -c "\dt"
+sudo docker compose build jupyterhub
+sudo docker compose up -d jupyterhub
+sudo docker compose logs -f jupyterhub
+sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub -c "\dt"
 ```
 
 ##### Eliminar y recrear solo un contenedor sin tocar datos
 ```bash
-docker compose stop postgres
-docker compose rm -f postgres
-docker compose up -d postgres
+sudo docker compose stop postgres
+sudo docker compose rm -f postgres
+sudo docker compose up -d postgres
 ```
 
 ##### Reiniciar todo sin perder nada
