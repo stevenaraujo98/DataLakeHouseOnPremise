@@ -151,7 +151,7 @@ sudo docker volume ls
 #### Reiniciar servicios
 Nota: Los datos en /data/datascience/postgres, /data/datascience/minio, etc. nunca se tocan con --rmi all. Ese flag solo afecta las imágenes Docker, no los volúmenes montados del host.
 
-##### Reiniciar solo un servicio específico
+##### Reiniciar solo un servicio específico (actualizacion de compose, py y dockerfile)
 Se conserva todo lo demás, solo se reinicia el servicio que quieras. Si se hace cambio en el codigo como app.py se necesita restart.
 ```bash
 cd /data/DataLakeHouseOnPremise
@@ -173,6 +173,14 @@ sudo docker compose up -d --build mlflow
 sudo docker compose up -d --build prefect
 sudo docker compose up -d --build jupyterhub
 sudo docker compose up -d --build streamlit
+```
+
+Ejemplo de cambio en docker-compose.yml, jupyterhub_config.py y Dockerfile para jupyterhub 
+```bash
+docker compose build jupyterhub
+docker compose up -d jupyterhub
+docker compose logs -f jupyterhub
+docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub -c "\dt"
 ```
 
 ##### Eliminar y recrear solo un contenedor sin tocar datos
