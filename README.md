@@ -104,10 +104,11 @@ sudo chown -R manager:manager /data/datascience/
 ```
 
 ### Docker
+#### Base
 ```bash
 # Bajar todos los servicios
 sudo docker compose down
-# Bajar todos los servicios y eliminar los volúmenes (¡cuidado, se perderán los datos!)
+# Bajar todos los servicios y eliminar los volúmenes
 sudo docker compose down -v
 # Bajar todos los servicios, volúmenes e imágenes 
 sudo docker compose down -v --rmi all
@@ -130,36 +131,71 @@ sudo docker compose logs -f
 sudo docker compose logs -f jupyterhub
 sudo docker compose logs -f postgres
 sudo docker compose logs -f prefect
+sudo docker compose logs -f mlflow
 
 sudo docker logs -f ds_jupyterhub
 sudo docker logs -f ds_postgres
 sudo docker logs -f ds_prefect
 
-sudodocker compose logs -f mlflow
-
 # Ver contenedores en ejecución
 sudo docker ps
 # ver todos los contenedores, incluyendo los detenidos
 sudo docker ps -a
+
+# Veri imagebes y Volumenes
+sudo docker image ls
+sudo docker images
+sudo docker volume ls
 ```
 
 #### Reiniciar servicios
 Nota: Los datos en /data/datascience/postgres, /data/datascience/minio, etc. nunca se tocan con --rmi all. Ese flag solo afecta las imágenes Docker, no los volúmenes montados del host.
 
-##### Reiniciar sin perder nada
+##### Reiniciar solo un servicio específico
+Se conserva todo lo demás, solo se reinicia el servicio que quieras. Si se hace cambio en el codigo como app.py se necesita restart.
+```bash
+cd /data/DataLakeHouseOnPremise
+
+# Ejemplo. El volumen ya lo monta en vivo
+docker compose restart postgres
+docker compose restart minio
+docker compose restart mlflow
+docker compose restart prefect
+docker compose restart jupyterhub
+docker compose restart streamlit
+```  
+
+Si reconstruiste la imagen, cambiaste código o Dockerfile de un servicio:
+```bash
+sudo docker compose up -d --build postgres
+sudo docker compose up -d --build minio
+sudo docker compose up -d --build mlflow
+sudo docker compose up -d --build prefect
+sudo docker compose up -d --build jupyterhub
+sudo docker compose up -d --build streamlit
+```
+
+##### Eliminar y recrear solo un contenedor sin tocar datos
+```bash
+docker compose stop postgres
+docker compose rm -f postgres
+docker compose up -d postgres
+```
+
+##### Reiniciar todo sin perder nada
+Bajar todo el stack y volverlo a subir sin perder datos:
 Se conserva imagenes, datos. Reinicio normal. Cambios en docker-compose.yml, no se necesita reconstruir imágenes.
-- cd /home/manager/DataLakeHouseOnPremise
 
 ```bash
-cd ~/DataLakeHouseOnPremise
+cd /data/DataLakeHouseOnPremise
 sudo docker compose down
 sudo docker compose up -d
 ```
 
-##### Reiniciar imágenes sin perder datos
+##### Reiniciar las imágenes sin perder datos
 Se reconstruyen las imágenes pero se conservan los datos. Útil si hiciste cambios en el Dockerfile o en la configuración de los servicios.
 ```bash
-cd ~/DataLakeHouseOnPremise
+cd /data/DataLakeHouseOnPremise
 
 # Bajar contenedores y eliminar solo las imágenes
 sudo docker compose down --rmi all
@@ -172,7 +208,7 @@ sudo docker compose up -d
 ##### Actualizar una imagen base
 Si quieres actualizar la imagen base (por ejemplo, si usas una imagen de Python y quieres la última versión), puedes hacer un pull de la imagen base y luego reconstruir tus imágenes.
 ```bash
-cd ~/DataLakeHouseOnPremise
+cd /data/DataLakeHouseOnPremise
 
 # Bajar contenedores y eliminar solo las imágenes
 sudo docker compose down --rmi all
@@ -181,17 +217,7 @@ sudo docker compose down --rmi all
 sudo docker compose up -d
 ```
 
-##### Reiniciar solo un servicio específico
-Se conserva todo lo demás, solo se reinicia el servicio que quieras. Si se hace cambio en el codigo como app.py se necesita restart.
-```bash
-cd ~/DataLakeHouseOnPremise
 
-# Ejemplo con mlflow (cambia el nombre según necesites) el volumen ya lo monta en vivo
-sudo docker compose restart mlflow
-
-# O si reconstruiste la imagen:
-sudo docker compose up -d --build mlflow
-```
 
 ##### Reinicio limpio (borra TODO)
 Se elimina todo datos, imagenes, volúmenes. Se levanta todo desde cero.

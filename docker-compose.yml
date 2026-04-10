@@ -98,6 +98,7 @@ services:
       - "8000:8000"
     environment:
       JUPYTERHUB_ADMIN: ${JUPYTERHUB_ADMIN:-admin}
+      JUPYTERHUB_DB_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/jupyterhub
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
@@ -105,8 +106,10 @@ services:
       PREFECT_API_URL: http://prefect:4200/api
       GIT_PYTHON_REFRESH: quiet
     depends_on:
-      - postgres
-      - mlflow
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
     networks:
       - ds_network
 

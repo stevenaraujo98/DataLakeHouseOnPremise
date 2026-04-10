@@ -1,5 +1,7 @@
 c = get_config()
 
+import os
+
 # Autenticación nativa (credenciales en base de datos persistente)
 c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
 
@@ -15,8 +17,12 @@ c.NativeAuthenticator.open_signup = True
 # Autorizar a todos los usuarios registrados (necesario en JupyterHub 4.x)
 c.Authenticator.allow_all = True
 
-# Base de datos en volumen persistente (sobrevive reinicios)
-c.JupyterHub.db_url = 'sqlite:////srv/jupyterhub/jupyterhub.sqlite'
+# Base de datos persistente para usuarios, tokens y estado interno.
+# Si no se define JUPYTERHUB_DB_URL, mantiene compatibilidad con SQLite.
+c.JupyterHub.db_url = os.environ.get(
+    'JUPYTERHUB_DB_URL',
+    'sqlite:////srv/jupyterhub/jupyterhub.sqlite'
+)
 c.JupyterHub.cookie_secret_file = '/srv/jupyterhub/jupyterhub_cookie_secret'
 
 # Directorio base de notebooks
@@ -35,7 +41,6 @@ c.Spawner.pre_spawn_hook = pre_spawn_hook
 c.Spawner.cmd = ['jupyterhub-singleuser', '--allow-root']
 
 # Reenviar variables de entorno de MinIO y MLflow a los kernels de notebook
-import os
 c.Spawner.environment = {
     # Credenciales S3-compatibles requeridas por MLflow/boto3
     'AWS_ACCESS_KEY_ID':     os.environ.get('AWS_ACCESS_KEY_ID', ''),
