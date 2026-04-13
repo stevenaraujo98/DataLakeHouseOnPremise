@@ -43,7 +43,7 @@ sudo df -h
 #### Liberar espacio
 Primera solucion:  
 Este comando eliminará todos los contenedores detenidos, redes no usadas e imágenes sin contenedores asociados.
-```
+```bash
 <!-- ***************************************************** -->
 sudo docker system prune -a --volumes
 <!-- ***************************************************** -->
@@ -234,6 +234,7 @@ sudo docker compose up -d
 ##### Reinicio limpio (borra TODO)
 Se elimina todo datos, imagenes, volúmenes. Se levanta todo desde cero.
 ```bash
+<!-- ***************************************************** -->
 cd ~/DataLakeHouseOnPremise
 
 # Bajar contenedores y eliminar volúmenes Docker
@@ -248,14 +249,16 @@ sudo rm -rf /data/datascience/postgres
 sudo mkdir -p /data/datascience/postgres
 sudo chmod 777 /data/datascience/postgres
 
-# Reconstruir imágenes y levantar desde cero
-sudo docker compose build --no-cache
-sudo docker compose up -d
-# o
 # limpar cache
 sudo docker system prune -a --volumes
 # compilar y ejecutar 
 sudo docker compose up -d --build
+
+# o
+# Reconstruir imágenes y levantar desde cero
+sudo docker compose build --no-cache
+sudo docker compose up -d
+<!-- ***************************************************** -->
 ```
 
 
