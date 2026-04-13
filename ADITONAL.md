@@ -67,7 +67,7 @@ O ejecutar un script
 sudo docker compose exec -T postgres psql -U "$POSTGRES_USER" -d saacdata < sql/create-db.sql
 sudo docker compose exec -T postgres psql -U "$POSTGRES_USER" -d saacdata < sql/add-db.sql
 # Ejecutar despues de add-db para resincronizar la secuencia de insert
-sudo docker compose exec postgres psql -U postgres -d saacdata -c "SELECT setval(pg_get_serial_sequence('\"T_OTRI_PI_ESTADOS\"', 'IDOTRIPIESTADOS'), (SELECT MAX(\"IDOTRIPIESTADOS\") FROM \"T_OTRI_PI_ESTADOS\"));"
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d saacdata -c "SELECT setval(pg_get_serial_sequence('\"T_OTRI_PI_ESTADOS\"', 'IDOTRIPIESTADOS'), (SELECT MAX(\"IDOTRIPIESTADOS\") FROM \"T_OTRI_PI_ESTADOS\"));"
 ```
 
 ### MinIO
