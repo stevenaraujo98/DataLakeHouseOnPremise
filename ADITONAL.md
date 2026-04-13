@@ -49,7 +49,7 @@ CREATE DATABASE saacdata;
 \c saacdata
 ```
 
-Nota: si escribes `CREATE DATABASE SAACDATA;` sin comillas, PostgreSQL realmente crea `saacdata` en minúsculas. Si quieres usar mayúsculas exactas, tendrías que crearla como `CREATE DATABASE "SAACDATA";` y luego conectarte con `\c "SAACDATA"`, pero no es recomendable para uso diario.
+Nota: si escribes `CREATE DATABASE SAACDATA;` sin comillas, PostgreSQL realmente crea `saacdata` en minúsculas. Si quieres usar mayúsculas exactas, tendrías que crearla como `CREATE DATABASE "SAACDATA";` y luego conectarte con `\c "SAACDATA"`, pero no es recomendable para uso diario. Para salir `CTRL + D`.
 
 Agregar datos a la base de datos
 ```bash
