@@ -26,6 +26,34 @@ exit
 ```
 
 ### Linux
+#### Variable de entorno
+```bash
+export POSTGRES_USER=
+```
+#### Horario servidor
+Para ver el estado detallado del reloj, zona horaria y sincronización.
+```bash
+timedatectl
+timedatectl status
+date -u
+uptime
+ls -l /etc/localtime
+```
+
+Ver en el contenedor
+```bash
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d saacdata -c "SHOW timezone; SELECT NOW();"
+```
+
+Cambiar zona del servidor local
+```bash
+# Listar zonas
+timedatectl list-timezones
+# Establecer zona
+sudo timedatectl set-timezone America/Guayaquil
+```
+
+
 #### Ver almacenamiento
 ```
 sudo du -sh /var/lib/
