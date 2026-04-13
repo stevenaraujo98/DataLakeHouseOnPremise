@@ -26,6 +26,7 @@ sudo docker inspect ds_jupyterhub --format '{{json .Mounts}}'
 
 ```bash
 sudo docker exec -it ds_postgres bash
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d postgres
 sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d postgres
 sudo docker exec -it ds_postgres psql -U "$POSTGRES_USER" -d jupyterhub
 ```
@@ -37,6 +38,30 @@ Consultas útiles dentro de `psql`:
 \c jupyterhub
 \dt
 SELECT count(*) FROM users;
+```
+
+##### Crear una base de datos nueva desde la base de datos postgress
+```bash
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d postgres
+
+CREATE DATABASE SAACDATA;
+\c SAACDATA
+```
+
+Agregar datos a la base de datos
+```bash
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d postgres
+
+CREATE TABLE otri (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+O ejecutar un script
+```bash
+docker compose exec -T postgres psql -U TU_USUARIO -d postgres < sql/001_create_analytics.sql
 ```
 
 ### MinIO
