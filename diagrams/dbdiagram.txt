@@ -1,0 +1,189 @@
+https://dbdiagram.io/d
+
+
+// Escalabilidad: Si mañana decides cambiar la IA o el motor de búsqueda, solo tocas la lógica que llena RESPUESTA, pero el sistema de seguimiento de tareas (PROCESO) sigue funcionando igual.
+// Auditoría: Puedes saber cuánto tiempo exacto tomó cada fase del proceso comparando FECHA_INICIO y FECHA_FIN en la tabla de procesos, sin "ensuciar" la tabla de resultados legales/técnicos.
+// Experiencia de Usuario (UX): Al tener PASO_ACTUAL en la tabla de proceso, tu frontend puede mostrar un "Steppers" o barra de progreso descriptiva, lo cual es vital para procesos de más de 5 minutos para evitar que el usuario piense que el sistema se colgó.
+
+
+// ============================================================================
+// ESQUEMA SAACDATA - DBDIAGRAM.IO
+// ============================================================================
+
+// --- TABLAS MAESTRAS Y ESTADOS ---
+
+Table T_OTRI_PI_ESTADOS {
+  IDOTRIPIESTADOS integer [pk, increment]
+  DESCRIPCION varchar(255) [not null, unique]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+Table T_OTRI_PI_PARAMETROS {
+  IDOTRIPIPARAMETROS integer [pk, increment]
+  RESULTADOMAXIMO integer
+  OBVIEDADMINREF integer
+  NUMEROTOPK integer [not null]
+  UMBRALNOVEDAD numeric(5,4)
+  RANGOINFERIOR numeric(5,4)
+  RANGOSUPERIOR numeric(5,4)
+  UMBRALOBVIEDADMEDIA numeric(5,4)
+  UMBRALOBVIEDADMULREF numeric(5,4)
+  NOMBREMODELO varchar(255)
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+// --- ANÁLISIS ---
+
+Table T_OTRI_PI_NOVEDAD {
+  IDOTRIPINOVEDAD integer [pk, increment]
+  IDOTRIPIESTADOS integer [not null]
+  RIESGO integer [not null, note: "1-3"]
+  MAXIMASIMILITUD numeric(8,6) [not null]
+  PUNTAJENOVEDAD numeric(8,6) [not null]
+  UMBRALNNONOVEDADALTO numeric(5,4) [not null]
+  UMBRALZONAGRISBAJO numeric(5,4) [not null]
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+Table T_OTRI_PI_INVENTIVO {
+  IDOTRIPIINVENTIVO integer [pk, increment]
+  IDOTRIPIESTADOS integer [not null]
+  RIESGO integer [not null, note: "1-3"]
+  MEDIASIMILITUDTOPK numeric(8,6)
+  NUMEROREFFUERTES integer
+  GRUPOSCPCUNICOS text
+  DESCRIPCION varchar(255)
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+Table T_OTRI_PI_INDUSTRIAL {
+  IDOTRIPIINDUSTRIAL integer [pk, increment]
+  IDOTRIPIESTADOS integer [not null]
+  PALABRACLAVEEVIDEN text
+  SECCIONESCPCPRINCI text
+  GRUPOSCPCPRINCI text
+  ETIQUETASESUGERI text
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+Table T_OTRI_PI_INDUSTRIAL_LLM {
+  IDOTRIPIINDUSTRIALLLM integer [pk, increment]
+  IDOTRIPIESTADOS integer [not null]
+  CONFIANZA numeric(3,2)
+  FRASESEVIDENCIA text
+  INFORMACIONFALTANTE text
+  ETIQUETASINDUSSUGE text
+  NOTASEN text
+  NOTASES text
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+// --- MÓDULOS DE INTEGRACIÓN ---
+
+Table T_OTRI_PI_MODULOS {
+  IDOTRIPIMODULOS integer [pk, increment]
+  IDOTRIPINOVEDAD integer [not null]
+  IDOTRIPIINVENTIVO integer [not null]
+  IDOTRIPIESTADOS integer [not null]
+  IDOTRIPIINDUSTRIAL integer [not null]
+  IDOTRIPIINDUSTRIALLLM integer [not null]
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+// --- PROCESO Y RESPUESTA ---
+
+Table T_OTRI_PI_PROCESO {
+  IDOTRIPIPROCESO integer [pk, increment]
+  IDPERSONA integer [not null]
+  RESUMEN text
+  MENSAJEERROR text
+  PROGRESO integer [default: 0, note: "0-100"]
+  IDTAREA varchar(50) [not null, unique]
+  TITULO varchar(500) [not null]
+  IDOTRIPIESTADOS integer [not null]
+  PASOACTUAL varchar(100)
+  FECHACREACION timestamp [default: `now()`]
+  FECHAACTUALIZACION timestamp
+  FECHAFIN timestamp
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+Table T_OTRI_PI_RESPUESTA {
+  IDOTRIPIRESPUESTA integer [pk, increment]
+  IDOTRIPIPROCESO integer [not null, unique]
+  IDOTRIPIPARAMETROS integer [not null]
+  IDOTRIPIMODULOS integer [not null]
+  IDOTRIPIREFERENCIASRAW integer
+  REFERENCPRINCIPALES text
+  REFERENCIAARTICULOS text
+  REFERENCIASPATENTES text
+  MARCATIEMPOISO varchar(50)
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+// --- ALMACENAMIENTO RAW (MinIO) ---
+
+Table T_OTRI_PI_REFERENCIAS_RAW {
+  IDOTRIPIREFERENCIASRAW integer [pk, increment]
+  IDOTRIPIPROCESO integer [not null]
+  MODOALMACENAMIENTO varchar(20) [not null, note: "CONSOLIDADO, SEPARADO"]
+  STORAGE_PROVIDER varchar(20) [not null, default: 'MINIO']
+  BUCKET_BASE varchar(255)
+  PREFIJO_BASE text
+  FORMATO_PREFERIDO varchar(20)
+  DESCRIPCION text
+  METADATA jsonb
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+Table T_OTRI_PI_REFERENCIAS_RAW_DETALLE {
+  IDOTRIPIREFERENCIASRAWDET integer [pk, increment]
+  IDOTRIPIREFERENCIASRAW integer [not null]
+  TIPO_CONTENIDO varchar(20) [not null, note: "CONSOLIDADO, PRINCIPALES, etc"]
+  BUCKET varchar(255) [not null]
+  OBJECT_KEY text [not null]
+  FORMATO_ARCHIVO varchar(20) [not null]
+  NOMBRE_ARCHIVO varchar(500)
+  MIME_TYPE varchar(100)
+  TAMANIO_BYTES bigint
+  ETAG varchar(128)
+  VERSION_ID varchar(255)
+  CHECKSUM_SHA256 char(64)
+  ORDEN smallint [not null, default: 1]
+  ACTIVO boolean [not null, default: true]
+  METADATA jsonb
+  FECHACREACION timestamp [default: `now()`]
+  ULTIMO_CAMBIO timestamp [default: `now()`]
+}
+
+// --- RELACIONES (FOREIGN KEYS) ---
+
+Ref: T_OTRI_PI_NOVEDAD.IDOTRIPIESTADOS > T_OTRI_PI_ESTADOS.IDOTRIPIESTADOS
+Ref: T_OTRI_PI_INVENTIVO.IDOTRIPIESTADOS > T_OTRI_PI_ESTADOS.IDOTRIPIESTADOS
+Ref: T_OTRI_PI_INDUSTRIAL.IDOTRIPIESTADOS > T_OTRI_PI_ESTADOS.IDOTRIPIESTADOS
+Ref: T_OTRI_PI_INDUSTRIAL_LLM.IDOTRIPIESTADOS > T_OTRI_PI_ESTADOS.IDOTRIPIESTADOS
+
+Ref: T_OTRI_PI_MODULOS.IDOTRIPINOVEDAD > T_OTRI_PI_NOVEDAD.IDOTRIPINOVEDAD
+Ref: T_OTRI_PI_MODULOS.IDOTRIPIINVENTIVO > T_OTRI_PI_INVENTIVO.IDOTRIPIINVENTIVO
+Ref: T_OTRI_PI_MODULOS.IDOTRIPIESTADOS > T_OTRI_PI_ESTADOS.IDOTRIPIESTADOS
+Ref: T_OTRI_PI_MODULOS.IDOTRIPIINDUSTRIAL > T_OTRI_PI_INDUSTRIAL.IDOTRIPIINDUSTRIAL
+Ref: T_OTRI_PI_MODULOS.IDOTRIPIINDUSTRIALLLM > T_OTRI_PI_INDUSTRIAL_LLM.IDOTRIPIINDUSTRIALLLM
+
+Ref: T_OTRI_PI_PROCESO.IDOTRIPIESTADOS > T_OTRI_PI_ESTADOS.IDOTRIPIESTADOS
+
+Ref: T_OTRI_PI_REFERENCIAS_RAW.IDOTRIPIPROCESO > T_OTRI_PI_PROCESO.IDOTRIPIPROCESO [delete: cascade]
+
+Ref: T_OTRI_PI_RESPUESTA.IDOTRIPIPROCESO - T_OTRI_PI_PROCESO.IDOTRIPIPROCESO
+Ref: T_OTRI_PI_RESPUESTA.IDOTRIPIPARAMETROS > T_OTRI_PI_PARAMETROS.IDOTRIPIPARAMETROS
+Ref: T_OTRI_PI_RESPUESTA.IDOTRIPIMODULOS > T_OTRI_PI_MODULOS.IDOTRIPIMODULOS
+Ref: T_OTRI_PI_RESPUESTA.IDOTRIPIREFERENCIASRAW > T_OTRI_PI_REFERENCIAS_RAW.IDOTRIPIREFERENCIASRAW
+
+Ref: T_OTRI_PI_REFERENCIAS_RAW_DETALLE.IDOTRIPIREFERENCIASRAW > T_OTRI_PI_REFERENCIAS_RAW.IDOTRIPIREFERENCIASRAW [delete: cascade]
