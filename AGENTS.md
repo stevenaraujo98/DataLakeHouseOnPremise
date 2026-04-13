@@ -17,7 +17,7 @@
 
 ## Important paths
 - `docker-compose.yml`: source of truth for services, ports, dependencies and bind mounts.
-- `init-db.sql`: initial bootstrap for PostgreSQL databases. It only runs on first initialization of an empty Postgres data directory.
+- `sql/init-db.sql`: initial bootstrap for PostgreSQL databases. It only runs on first initialization of an empty Postgres data directory.
 - `jupyterhub/jupyterhub_config.py`: JupyterHub authentication, spawner and persistence settings.
 - `jupyterhub/Dockerfile`: JupyterHub image with Python/data tooling.
 - `mlflow/Dockerfile`: MLflow server image.

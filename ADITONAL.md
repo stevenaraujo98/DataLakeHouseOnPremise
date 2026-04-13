@@ -40,17 +40,20 @@ Consultas útiles dentro de `psql`:
 SELECT count(*) FROM users;
 ```
 
-##### Crear una base de datos nueva desde la base de datos postgress
+##### Crear una base de datos nueva desde PostgreSQL
 ```bash
 sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d postgres
 
-CREATE DATABASE SAACDATA;
-\c SAACDATA
+CREATE DATABASE saacdata;
+\l
+\c saacdata
 ```
+
+Nota: si escribes `CREATE DATABASE SAACDATA;` sin comillas, PostgreSQL realmente crea `saacdata` en minúsculas. Si quieres usar mayúsculas exactas, tendrías que crearla como `CREATE DATABASE "SAACDATA";` y luego conectarte con `\c "SAACDATA"`, pero no es recomendable para uso diario.
 
 Agregar datos a la base de datos
 ```bash
-sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d postgres
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d saacdata
 
 CREATE TABLE otri (
     id BIGSERIAL PRIMARY KEY,
@@ -61,7 +64,7 @@ CREATE TABLE otri (
 
 O ejecutar un script
 ```bash
-docker compose exec -T postgres psql -U TU_USUARIO -d postgres < sql/001_create_analytics.sql
+sudo docker compose exec -T postgres psql -U "$POSTGRES_USER" -d saacdata < sql/create-db.sql
 ```
 
 ### MinIO

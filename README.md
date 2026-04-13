@@ -44,7 +44,9 @@ sudo df -h
 Primera solucion:  
 Este comando eliminará todos los contenedores detenidos, redes no usadas e imágenes sin contenedores asociados.
 ```
+<!-- ***************************************************** -->
 sudo docker system prune -a --volumes
+<!-- ***************************************************** -->
 ```
 
 
@@ -203,6 +205,7 @@ sudo docker compose up -d
 ##### Reiniciar las imágenes sin perder datos
 Se reconstruyen las imágenes pero se conservan los datos. Útil si hiciste cambios en el Dockerfile o en la configuración de los servicios.
 ```bash
+<!-- ***************************************************** -->
 cd /data/DataLakeHouseOnPremise
 
 # Bajar contenedores y eliminar solo las imágenes
@@ -211,6 +214,7 @@ sudo docker compose down --rmi all
 # Reconstruir imágenes y levantar
 sudo docker compose build --no-cache
 sudo docker compose up -d
+<!-- ***************************************************** -->
 ```
 
 ##### Actualizar una imagen base
