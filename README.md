@@ -28,7 +28,9 @@ exit
 ### Linux
 #### Variable de entorno
 ```bash
+<!-- ***************************************************** -->
 export POSTGRES_USER=
+<!-- ***************************************************** -->
 ```
 #### Horario servidor
 Para ver el estado detallado del reloj, zona horaria y sincronización.

@@ -20,8 +20,6 @@ sudo docker inspect ds_postgres --format '{{json .Mounts}}'
 sudo docker inspect ds_jupyterhub --format '{{json .Mounts}}'
 ```
 
-
-
 ### PostgreSQL
 
 ```bash
@@ -42,11 +40,13 @@ SELECT count(*) FROM users;
 
 ##### Crear una base de datos nueva desde PostgreSQL
 ```bash
+<!-- ***************************************************** -->
 sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d postgres
 
 CREATE DATABASE saacdata;
 \l
 \c saacdata
+<!-- ***************************************************** -->
 ```
 
 Nota: si escribes `CREATE DATABASE SAACDATA;` sin comillas, PostgreSQL realmente crea `saacdata` en minúsculas. Si quieres usar mayúsculas exactas, tendrías que crearla como `CREATE DATABASE "SAACDATA";` y luego conectarte con `\c "SAACDATA"`, pero no es recomendable para uso diario. Para salir `CTRL + D`.
@@ -64,10 +64,12 @@ CREATE TABLE otri (
 
 O ejecutar un script
 ```bash
+<!-- ***************************************************** -->
 sudo docker compose exec -T postgres psql -U "$POSTGRES_USER" -d saacdata < sql/create-db.sql
 sudo docker compose exec -T postgres psql -U "$POSTGRES_USER" -d saacdata < sql/add-db.sql
 # Ejecutar despues de add-db para resincronizar la secuencia de insert
-sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d saacdata -c "SELECT setval(pg_get_serial_sequence('\"T_OTRI_PI_ESTADOS\"', 'IDOTRIPIESTADOS'), (SELECT MAX(\"IDOTRIPIESTADOS\") FROM \"T_OTRI_PI_ESTADOS\"));"
+sudo docker compose exec postgres psql -U "$POSTGRES_USER" -d saacdata -c "SELECT setval(pg_get_serial_sequence('\"OTRI\".\"T_OTRI_PI_ESTADOS\"', 'IDOTRIPIESTADOS'), (SELECT MAX(\"IDOTRIPIESTADOS\") FROM \"OTRI\".\"T_OTRI_PI_ESTADOS\"));"
+<!-- ***************************************************** -->
 ```
 
 ### MinIO
