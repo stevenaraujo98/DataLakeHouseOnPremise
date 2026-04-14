@@ -9,8 +9,13 @@
 --   - Campos pesados de referencias se dejan nullable
 --   - Se agrega modelo de archivos raw en MinIO
 -- ============================================================================
-
 BEGIN;
+
+-- 1. Crear el esquema si no existe
+CREATE SCHEMA IF NOT EXISTS "OTRI";
+
+-- 2. Establecer el esquema por defecto para esta ejecución
+SET search_path TO "OTRI";
 
 -- ============================================================================
 -- TABLA DE ESTADOS
