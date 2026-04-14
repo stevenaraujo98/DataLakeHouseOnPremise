@@ -279,6 +279,8 @@ sudo chmod 777 /data/datascience/postgres
 
 # limpar cache
 sudo docker system prune -a --volumes
+# actualizar repo
+sudo git pull
 # compilar y ejecutar 
 sudo docker compose up -d --build
 
