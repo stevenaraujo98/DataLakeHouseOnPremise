@@ -183,6 +183,25 @@ Test-NetConnection -ComputerName 192.168.10.59 -Port 5000
 Test-NetConnection -ComputerName 192.168.10.59 -Port 4200
 ```
 
+Desde el mismo servidor, por ejemplo base:
+```bash
+nc -zv 192.168.254.25 50000
+nc -zv 192.168.254.87 50000
+```
+
+Dentro del contenedor:
+```bash
+sudo docker exec -it n8n telnet 192.168.254.87 50000
+```
+
+Desde otro servidor:
+```bash
+nc -zv 192.168.254.25 50000
+nc -zv 192.168.254.87 50000
+nc -zv 192.168.10.59 8501
+nc -zv 192.168.10.59 9000
+```
+
 ## Cuándo necesitarías un proxy
 
 Usa Nginx o Traefik si quieres exponer todo por 80/443, centralizar HTTPS o publicar una sola URL sin puertos explícitos.
