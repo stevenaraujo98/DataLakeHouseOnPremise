@@ -34,6 +34,12 @@ export POSTGRES_PASSWORD=
 <!-- ***************************************************** -->
 ```
 
+#### Permisos de usuario
+```bash
+sudo chown -R manager:manager /data/DataLakeHouseOnPremise
+sudo chown -R manager:manager /data/datascience/
+```
+
 #### Horario servidor
 Para ver el estado detallado del reloj, zona horaria y sincronización.
 ```bash
