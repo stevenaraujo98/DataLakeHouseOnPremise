@@ -37,7 +37,13 @@ export POSTGRES_PASSWORD=
 #### Permisos de usuario
 ```bash
 sudo chown -R manager:manager /data/DataLakeHouseOnPremise
+
+<!-- *************************************** -->
 sudo chown -R manager:manager /data/datascience/
+# Restaurar owner de postgres (UID 999 = usuario postgres dentro del contenedor)
+sudo chown -R 999:999 /data/datascience/postgres
+<!-- *************************************** -->
+
 ```
 
 #### Horario servidor
@@ -129,7 +135,7 @@ docker info | grep "Docker Root Dir"
 ```
 
 #### Cambiar todo el codigo a /data
-```
+```bash
 sudo mv ~/DataLakeHouseOnPremise /data/
 <!-- Cambiar al nuevo directorio -->
 cd /data/DataLakeHouseOnPremise
@@ -138,7 +144,12 @@ sudo chown -R manager:manager /data/DataLakeHouseOnPremise
 <!-- Asegurar que las carpetas de datos existan en el SSD -->
 sudo mkdir -p /data/datascience/{postgres,minio,prefect,jupyterhub,notebooks}
 sudo chmod -R 775 /data/datascience/
+
+<!-- *************************************** -->
 sudo chown -R manager:manager /data/datascience/
+# Restaurar owner de postgres (UID 999 = usuario postgres dentro del contenedor)
+sudo chown -R 999:999 /data/datascience/postgres
+<!-- *************************************** -->
 ```
 
 ### Docker
