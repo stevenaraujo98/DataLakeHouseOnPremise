@@ -15,6 +15,23 @@
 - Streamlit serves dashboards from `dashboards/app.py` and reads data from MinIO.
 - `minio-setup` is a one-shot bootstrap container that creates buckets and can be safely recreated.
 
+## MinIO buckets explained
+MinIO provides S3-compatible object storage with four automatically created buckets:
+
+- **`raw-data`** — Stores unprocessed source data (CSV, JSON, etc.). Suggested path structure: `s3://raw-data/bronze/date/batch/data.csv`. Used as the single source of truth for ingested external data; consumed by JupyterHub, Prefect, and Streamlit.
+
+- **`processed-data`** — Stores transformed and refined data in multiple layers:
+  - `silver/`: cleaned and enriched data
+  - `gold/`: aggregated data ready for consumption
+  - `features/`: engineered features for ML models (e.g., `customer_features/v2026_03_13/`)
+  - Intermediate storage between raw ingestion and final consumption; consumed for analysis, dashboards, and model training.
+
+- **`models`** — Stores serialized machine learning models (pickle, joblib, ONNX, etc.). Provides manual versioning and management of trained models independent of MLflow's artifact system.
+
+- **`artifacts`** — Managed automatically by MLflow (`--default-artifact-root s3://artifacts/`). Stores complete model artifacts, metrics, parameters, and experiment metadata with full MLflow integration and lifecycle tracking. Accessible via MLflow UI at `http://SERVER_IP:5000`.
+
+All buckets are created automatically on first stack startup by the `minio-setup` bootstrap service.
+
 ## Important paths
 - `docker-compose.yml`: source of truth for services, ports, dependencies and bind mounts.
 - `sql/init-db.sql`: initial bootstrap for PostgreSQL databases. It only runs on first initialization of an empty Postgres data directory.
