@@ -211,3 +211,17 @@ telnet 192.168.10.59 9000
 ## Cuándo necesitarías un proxy
 Usa Nginx o Traefik si quieres exponer todo por 80/443, centralizar HTTPS o publicar una sola URL sin puertos explícitos.
 
+## Agregar Bucket a MinIo
+```bash
+sudo docker compose run --rm --entrypoint sh minio-setup -c "
+  mc alias set myminio http://minio:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD && \
+  mc mb --ignore-existing myminio/download-files && \
+  mc anonymous set download myminio/download-files && \
+  echo 'Bucket creado y politica aplicada correctamente'
+"
+```
+
+Y para descargar seria algo como:
+```bash
+http://192.168.10.59:9000/download-files/cv_th/tmp_cv_0922663208_format_A.pdf
+```
