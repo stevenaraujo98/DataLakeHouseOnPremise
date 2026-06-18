@@ -90,6 +90,15 @@ ls -lah /home
 env | sort
 ```
 
+##### Un ".env"
+Crearlo manualmente por seguridad no todos los usuarios pueden ver los archivos ocultos por seguridad como ".env"
+```bash
+touch RUTA/datascience/notebooks/USUARIOS/CARPETA/.env
+nano RUTA/datascience/notebooks/USUARIOS/CARPETA/.env
+cat RUTA/datascience/notebooks/USUARIOS/CARPETA/.env
+ls -la RUTA/datascience/notebooks/USUARIOS/CARPETA/.env
+```
+
 ### MLflow
 
 ```bash
