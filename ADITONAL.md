@@ -1,5 +1,21 @@
 # Operación adicional
 
+## Docker
+- ¿Para qué sirven los healthchecks?
+Son la forma en que Docker sabe si un contenedor está realmente listo para recibir tráfico, no solo si el proceso arrancó.
+Sin healthcheck, Docker considera un contenedor "listo" en cuanto el proceso inicia — pero Postgres puede tardar 3-5 segundos en aceptar conexiones reales después de arrancar. Sin healthcheck, MLflow intentaría conectarse a Postgres antes de que esté listo y fallaría.
+El flujo con healthchecks es:
+
+```bash
+postgres arranca
+    → Docker ejecuta pg_isready cada 10s
+    → cuando responde OK → marca postgres como "healthy"
+        → pgbouncer arranca (depends_on: postgres healthy)
+            → cuando pgbouncer responde OK → marca como "healthy"
+                → mlflow, prefect, jupyterhub arrancan (depends_on: pgbouncer healthy)
+```
+Sin healthchecks ese orden no está garantizado y los servicios fallan al arrancar por conexión rechazada, luego Docker los reinicia solos — funciona eventualmente pero genera errores en los logs y puede corromper migraciones de base de datos si el ORM intenta crear tablas a medias.
+
 ## Entrar a los contenedores
 
 Todos los comandos asumen que estás parado en la raíz del proyecto.
@@ -36,6 +52,23 @@ Consultas útiles dentro de `psql`:
 \c jupyterhub
 \dt
 SELECT count(*) FROM users;
+```
+
+#### Pgbouncer
+# 1. Generar el userlist.txt con tus credenciales reales
+```bash
+chmod +x pgbouncer/generate-config.sh
+./pgbouncer/generate-config.sh
+```
+
+# 2. Verificar que se generó
+```bash
+cat pgbouncer/userlist.txt   # debe mostrar: "tu_usuario" "tu_password"
+```
+
+# 3. Levantar
+```bash
+sudo docker compose -f docker-compose.yml up -d
 ```
 
 ##### Crear una base de datos nueva desde PostgreSQL
