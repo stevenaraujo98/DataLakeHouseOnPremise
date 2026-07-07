@@ -1,15 +1,7 @@
 FROM quay.io/jupyterhub/jupyterhub:4.0
 
-# System libraries — bypass GPG date-check issues in Docker build environments
-RUN apt-get update \
-    -o Acquire::Check-Valid-Until=false \
-    -o Acquire::Check-Date=false \
-    && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    libopenblas-base \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*RUN pip install --no-cache-dir \
+# All packages are pre-built binary wheels — no system compiler needed
+RUN pip install --no-cache-dir \
     "jupyterhub==4.0.*" \
     jupyterlab \
     notebook \
@@ -27,9 +19,10 @@ RUN apt-get update \
     prefect \
     streamlit
 
-# PyTorch CPU-only + HuggingFace stack for model inference (no GPU needed)
+# PyTorch CPU-only (pre-built wheel, no gcc needed) + HuggingFace stack
 RUN pip install --no-cache-dir \
-    torch --index-url https://download.pytorch.org/whl/cpu
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch
 
 RUN pip install --no-cache-dir \
     transformers \
