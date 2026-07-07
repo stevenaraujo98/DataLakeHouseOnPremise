@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir \
     polars-lts-cpu \
     duckdb \
     "mlflow>=2.10,<3" \
-    boto3 \
+    "boto3>=1.42.90,<1.43.0" \
     s3fs \
     plotly \
     pandas \
