@@ -1,14 +1,15 @@
 FROM quay.io/jupyterhub/jupyterhub:4.0
 
-# System libraries required by numpy, scikit-learn, mlflow native extensions
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# System libraries — bypass GPG date-check issues in Docker build environments
+RUN apt-get update \
+    -o Acquire::Check-Valid-Until=false \
+    -o Acquire::Check-Date=false \
+    && apt-get install -y --no-install-recommends \
     libgomp1 \
     libopenblas-base \
     gcc \
     g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir \
+    && rm -rf /var/lib/apt/lists/*RUN pip install --no-cache-dir \
     "jupyterhub==4.0.*" \
     jupyterlab \
     notebook \
