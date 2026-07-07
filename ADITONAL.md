@@ -139,6 +139,16 @@ sudo docker exec -it ds_mlflow sh
 env | sort
 ```
 
+MLflow si necesitas trazabilidad, versionado propio o comparación de resultados.  
+
+| Caso | ¿MLflow? |
+| :--- | :---: |
+| Cargar modelo directo desde HuggingFace | ❌ No necesario |
+| Registrar un modelo fine-tuneado tuyo para reutilizarlo | ✅ mlflow.transformers.log_model() |
+| Comparar resultados entre versiones de prompt o modelo | ✅ mlflow.log_metrics() |
+| Tener un registro centralizado de qué modelo usaste en producción | ✅ MLflow Model Registry |
+| Inferencia batch y quieres auditar parámetros de la ejecución | ✅ mlflow.start_run() |
+
 ### Prefect
 
 ```bash

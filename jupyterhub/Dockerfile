@@ -26,6 +26,16 @@ RUN pip install --no-cache-dir \
     prefect \
     streamlit
 
+# PyTorch CPU-only + HuggingFace stack for model inference (no GPU needed)
+RUN pip install --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install --no-cache-dir \
+    transformers \
+    accelerate \
+    sentencepiece \
+    tokenizers
+
 # Register the kernel so Jupyter can find it
 RUN python -m ipykernel install --sys-prefix
 
