@@ -81,6 +81,23 @@ sudo du -sh /data/*
 sudo du -h --max-depth=1 /data/
 
 sudo df -h
+sudo du -sh /*
+```
+
+#### Ver almacenamiento de docker y verificar
+```bash
+sudo docker system df
+sudo docker system df -v
+
+sudo containerd config dump | grep -m1 "^root"
+sudo nano /etc/containerd/config.toml
+sudo grep "^root" /etc/containerd/config.toml
+sudo nano /etc/docker/daemon.json
+```
+
+#### Borrar
+```bash
+sudo rm -rf /data/backups/containerd.old.*
 ```
 
 #### Liberar espacio
