@@ -1,6 +1,13 @@
 FROM quay.io/jupyterhub/jupyterhub:4.0
 
-# All packages are pre-built binary wheels — no system compiler needed
+# System libraries required by numpy, scikit-learn, mlflow native extensions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libopenblas-base \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir \
     "jupyterhub==4.0.*" \
     jupyterlab \
@@ -19,10 +26,9 @@ RUN pip install --no-cache-dir \
     prefect \
     streamlit
 
-# PyTorch CPU-only (pre-built wheel, no gcc needed) + HuggingFace stack
+# PyTorch CPU-only + HuggingFace stack for model inference (no GPU needed)
 RUN pip install --no-cache-dir \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    torch
+    torch --index-url https://download.pytorch.org/whl/cpu
 
 RUN pip install --no-cache-dir \
     transformers \
