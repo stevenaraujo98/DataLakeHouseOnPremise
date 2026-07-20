@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir \
     s3fs \
     plotly \
     pandas \
+    openpyxl \
     scikit-learn \
     prefect \
     streamlit
