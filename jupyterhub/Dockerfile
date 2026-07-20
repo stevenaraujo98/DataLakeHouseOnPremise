@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir \
     plotly \
     pandas \
     openpyxl \
+    openai \
     scikit-learn \
     prefect \
     streamlit
