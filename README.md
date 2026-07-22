@@ -9,6 +9,30 @@ Stack de tecnologías para implementar un Data Lakehouse en un entorno on-premis
 
 Cada componente está configurado para utilizar almacenamiento persistente en un SSD local, asegurando un rendimiento óptimo para las operaciones de lectura y escritura de datos
 
+### Estructura de carpetas en el servidor
+En `/data` conviven dos árboles con propósitos distintos — no mezclar código con datos:
+
+```
+/data/
+├── DataLakeHouseOnPremise/   ← este repo git (código: compose, Dockerfiles, flows organizacionales)
+└── datascience/              ← datos en runtime (bind mounts, fuera de git)
+    ├── notebooks/{usuario}/  ← home de cada usuario de JupyterHub = sus notebooks y sus flows personales
+    ├── flows/                ← flows/utilidades compartidos entre usuarios (no van a git)
+    ├── postgres/ minio/ prefect/ jupyterhub/ ...
+```
+
+Dentro de `DataLakeHouseOnPremise/` (build contexts y config, uno por servicio):
+- `docker-compose.yml`: orquesta todo el stack.
+- `flows/`: flows **organizacionales** versionados en git (ver [PREFECT_JUPYTER_GUIDE.md](PREFECT_JUPYTER_GUIDE.md)), incluye `common_tasks.py` con las tareas compartidas de Postgres/MinIO.
+- `jupyterhub/`, `mlflow/`, `prefect-worker/`, `dashboards/`: `Dockerfile` (y config) de cada servicio.
+- `notebooks/`: notebooks de ejemplo/plantilla versionados en git (ej. `Prefect_Jobs_Scheduler.ipynb`, `1_process.ipynb`), montados como `/srv/notebooks/examples` en JupyterHub — son solo referencia, distintos de los notebooks reales de cada usuario (esos viven en `datascience/notebooks/{usuario}/`, montados como `/home/{usuario}`).
+- `sql/`: bootstrap inicial de PostgreSQL.
+- `pgbouncer/`: config de referencia, hoy el servicio `pgbouncer` se configura solo por variables de entorno, no lee estos archivos.
+- `diagrams/`: fuente de diagramas de arquitectura, no se usa en runtime.
+- `AGENTS.md`, `ADITONAL.md`: guías operativas.
+
+> Si acabas de traer los cambios de `prefect-worker` (worker de Prefect) a este repo, en el servidor falta hacer `git pull` antes de `docker compose up -d --build` — sin eso, `docker-compose.yml` referenciará `./prefect-worker` pero esa carpeta todavía no existirá ahí.
+
 ### Consideraciones
 #### Crear usuario en JupyterHub
 ```bash

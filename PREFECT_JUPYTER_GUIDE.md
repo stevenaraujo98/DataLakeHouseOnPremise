@@ -1,0 +1,235 @@
+# Guía: de notebook a flow programado en Prefect (desde JupyterHub)
+
+Pasos para que un usuario de JupyterHub convierta su análisis en un flow de
+Prefect, lo pruebe, lo deploye, y controle cuándo se ejecuta — todo desde la
+terminal de JupyterHub, sin tocar los contenedores `ds_prefect` / `ds_prefect_worker`.
+
+Contexto (ver también [AGENTS.md](AGENTS.md), sección "Prefect flows: org / shared / users"):
+- El servidor `prefect` (`ds_prefect`) solo es API + UI. El que **ejecuta** los flows
+  es el servicio `prefect-worker` (`ds_prefect_worker`), que debe estar corriendo
+  (`docker compose ps prefect-worker`) para que cualquier deployment funcione.
+- Tareas compartidas (conexión a Postgres/MinIO, etc.) viven en
+  [flows/common_tasks.py](flows/common_tasks.py) y se importan con
+  `from common_tasks import ...` desde cualquier flow, gracias a `PYTHONPATH`.
+
+---
+
+## 0. Dónde trabajar
+
+Cada usuario tiene su carpeta en JupyterHub, que es la misma que
+`/data/datascience/notebooks/{usuario}/` en el host:
+
+```
+/home/{usuario}/{proyecto}/
+├── 1_analisis.ipynb      ← notebook de desarrollo
+└── mi_flow.py            ← flow que crearás en el paso 2
+```
+
+Ejemplo real ya existente: `/home/admin/analisis_chat_th/` (con `1_process.ipynb`
+y `main.ipynb`; el flow correspondiente vive en el repo como
+[flows/analisis_chat_th.py](flows/analisis_chat_th.py), un flow **organizacional**
+porque lo mantiene el equipo, no un solo usuario — para un flow personal, el
+`.py` va directo en tu carpeta, no en el repo).
+
+---
+
+## 1. Desarrollar y validar en el notebook
+
+Trabaja normalmente en tu `.ipynb` hasta que el código funcione: leer de
+Postgres, transformar, guardar en MinIO, etc.
+
+## 2. Convertir el notebook a un flow de Prefect
+
+Crea `mi_flow.py` en la misma carpeta, junto al notebook:
+
+```python
+from prefect import flow, task
+from common_tasks import connect_postgres, cerrar_conexion, leer_query, \
+    conectar_minio, subir_dataframe_csv
+
+@task
+def mi_transformacion(df):
+    # tu lógica aquí
+    return df
+
+@flow(name="mi-flow")
+def mi_flow():
+    conexion = connect_postgres(database="saacdata")
+    try:
+        df = leer_query(conexion, "SELECT * FROM mi_tabla")
+        df = mi_transformacion(df)
+
+        s3 = conectar_minio()
+        subir_dataframe_csv(s3, df, bucket="processed-data", key="mi_area/resultado.csv")
+    finally:
+        cerrar_conexion(conexion)
+
+if __name__ == "__main__":
+    mi_flow()
+```
+
+## 3. Probar el flow en la terminal de JupyterHub (ejecución local)
+
+Abre una terminal en JupyterHub (`File > New > Terminal`) y corre:
+
+```bash
+cd /home/{tu_usuario}/{tu_proyecto}
+python mi_flow.py
+```
+
+Esto ejecuta el flow **en ese mismo proceso** (no pasa por `prefect-worker`),
+pero como `PREFECT_API_URL` ya está configurado, el run queda registrado y
+visible en `http://SERVER_IP:4200`. Es la forma rápida de depurar antes de
+deployar.
+
+## 4. Deployar (registrar el flow en Prefect Server)
+
+Desde la misma terminal:
+
+```bash
+prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default
+```
+
+- El CLI puede hacerte 1-2 preguntas interactivas la primera vez (ej. si
+  quieres agregar un schedule ahora). Si no quieres que se ejecute todavía
+  automáticamente, responde que no / omite el schedule — ver el paso 6.
+- `--pool default` es el work pool que ya existe (lo crea automáticamente
+  `prefect-worker` al arrancar). No necesitas crearlo tú.
+- Si prefieres evitar los prompts interactivos: `export PREFECT_CLI_PROMPT=false`
+  antes de correr `prefect deploy`.
+
+En este punto el deployment existe en `http://SERVER_IP:4200/deployments`,
+pero **todavía no se ejecuta solo** a menos que le hayas puesto un schedule.
+
+## 5. Ejecutarlo inmediatamente (sin esperar ninguna programación)
+
+Esto es lo que quieres para "mandarlo ahora": crea un flow run que
+`prefect-worker` recoge de inmediato (normalmente en segundos) porque el
+worker siempre está haciendo polling.
+
+**Desde la UI:** `Deployments` → tu deployment → botón **Run** → **Quick run**.
+
+**Desde la terminal de JupyterHub:**
+```bash
+prefect deployment run 'mi-flow/mi-flow-prod'
+```
+(el formato es `'<nombre-del-flow>/<nombre-del-deployment>'`, con comillas
+por la barra).
+
+Puedes hacer esto las veces que quieras, tenga o no un schedule configurado.
+
+## 6. Programarlo para que corra cada cierto tiempo
+
+⚠️ **La hora del cron es independiente del `TZ` del contenedor.** Prefect
+guarda cada schedule con su propia zona horaria (por defecto UTC si no la
+especificas), sin importar que `prefect-worker`/`jupyterhub` ya tengan
+`TZ=America/Guayaquil`. Si programas `0 2 * * *` sin indicar zona, correrá a
+las 2 AM **UTC** = 9 PM en Ecuador (UTC-5), no a las 2 AM de Ecuador.
+Especifica siempre la zona al crear el schedule.
+
+**Desde la UI (recomendado, no depende de la versión exacta del CLI):**
+`Deployments` → tu deployment → **Create Schedule** → elige `Cron`
+(ej. `0 2 * * *` = 2 AM diario) o `Interval`, y selecciona **Timezone:
+America/Guayaquil** en el mismo diálogo.
+
+**Desde la terminal:**
+```bash
+prefect deployment schedule create 'mi-flow/mi-flow-prod' --cron "0 2 * * *" --timezone "America/Guayaquil"
+```
+Si tu versión de Prefect usa otra sintaxis, confírmala con
+`prefect deployment schedule --help`.
+
+(La `TZ=America/Guayaquil` del contenedor sí importa para otra cosa: para
+que `datetime.now()` dentro del código del flow, ej. el timestamp del
+nombre del Excel en `analisis_chat_th.py`, refleje la hora de Ecuador — eso
+es aparte de a qué hora dispara el schedule.)
+
+## 7. Pausar la programación sin borrar el deployment
+
+Útil cuando quieres dejar de correr automáticamente pero seguir pudiendo
+correrlo manualmente (paso 5) o reactivarlo después.
+
+**Desde la UI:** en la lista de schedules del deployment, apaga el toggle
+**Active**.
+
+**Desde la terminal:**
+```bash
+prefect deployment schedule ls 'mi-flow/mi-flow-prod'        # obtener el schedule id
+prefect deployment schedule pause 'mi-flow/mi-flow-prod' <schedule_id>
+prefect deployment schedule resume 'mi-flow/mi-flow-prod' <schedule_id>
+```
+
+## 8. Actualicé el script — ¿cómo aplico el cambio?
+
+- **Solo cambiaste la lógica interna** (mismo archivo, misma función `@flow`,
+  mismos parámetros): no hace falta re-deployar. `prefect-worker` lee el
+  `.py` desde disco (bind mount) en cada ejecución nueva, así que el próximo
+  run — manual o programado — ya usa el código actualizado. Basta con
+  guardar el archivo.
+- **Cambiaste el nombre de la función `@flow`, el nombre del archivo, los
+  parámetros que recibe, o quieres actualizar nombre/descripción/tags del
+  deployment**: vuelve a correr el mismo comando de deploy:
+  ```bash
+  prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default
+  ```
+  Como el nombre del deployment es el mismo, esto **actualiza** el
+  deployment existente (mismo ID, mismo historial de runs) en vez de crear
+  uno duplicado, y normalmente conserva el/los schedule(s) que ya tenía.
+  Confirma la versión/descripción en la UI después.
+- Para verificar el cambio sin esperar el próximo schedule, dispara un run
+  manual (paso 5) y revisa los logs.
+
+## 9. Detener una ejecución que ya está corriendo
+
+Esto es distinto de pausar el schedule (que solo evita runs *futuros*).
+Para cancelar un run que está **en curso ahora mismo**:
+
+- **UI:** `Deployments` → tu deployment → pestaña de runs → abre el run
+  activo → botón **Cancel**.
+- **Terminal:**
+  ```bash
+  prefect flow-run ls --limit 5        # ver ids recientes y su estado
+  prefect flow-run cancel <flow-run-id>
+  ```
+
+La cancelación es cooperativa: si el flow está en medio de algo bloqueante
+(ej. una query SQL pesada), puede tardar unos segundos en detenerse de
+verdad.
+
+## 10. Eliminar la programación o el deployment completo
+
+**Borrar solo un schedule** (el deployment sigue existiendo, puedes seguir
+corriéndolo manual o ponerle un schedule nuevo después):
+```bash
+prefect deployment schedule ls 'mi-flow/mi-flow-prod'          # obtener el schedule id
+prefect deployment schedule delete 'mi-flow/mi-flow-prod' <schedule_id>
+```
+En la UI: en la lista de schedules del deployment, ícono de basura junto al
+schedule que quieras quitar.
+
+**Borrar el deployment completo** (borra también sus schedules; tu
+`mi_flow.py` en disco no se toca, solo se elimina el registro en Prefect):
+```bash
+prefect deployment delete 'mi-flow/mi-flow-prod'
+```
+En la UI: `Deployments` → tu deployment → menú `...` → **Delete**.
+
+> Diferencia clave: *pausar* (paso 7) es reversible y mantiene el schedule
+> guardado con un toggle; *eliminar* el schedule o el deployment no se
+> puede deshacer — hay que volver a crearlo.
+
+## 11. Verificar que corrió
+
+- UI: `http://SERVER_IP:4200/deployments/deployment/<id>` → pestaña de runs, logs por task.
+- Terminal: `docker compose logs -f prefect-worker` (en el servidor).
+
+---
+
+## Troubleshooting
+
+| Síntoma | Causa probable | Qué revisar |
+|---|---|---|
+| El run se queda en `Scheduled`/`Late` para siempre | `prefect-worker` no está corriendo | `docker compose ps prefect-worker`, `docker compose logs prefect-worker` |
+| `ModuleNotFoundError` al correr el deployment (pero `python mi_flow.py` sí funcionó en JupyterHub) | La librería está en `jupyterhub/Dockerfile` pero no en `prefect-worker/Dockerfile` | Agrégala a `prefect-worker/Dockerfile` y `docker compose build prefect-worker` |
+| `ImportError: No module named 'common_tasks'` | `PYTHONPATH` no llegó al proceso | Verifica `PYTHONPATH` en el entorno (`echo $PYTHONPATH`); en JupyterHub reinicia tu kernel/servidor para recoger cambios de `jupyterhub_config.py` |
+| El deployment no aparece en la UI aunque el `prefect deploy` "funcionó" | Corriste `prefect deploy` desde `ds_prefect` (no desde JupyterHub) sin `PREFECT_API_URL`, y quedó en una API efímera local | Siempre deploya desde la terminal de JupyterHub, nunca con `docker exec -it ds_prefect ...` |

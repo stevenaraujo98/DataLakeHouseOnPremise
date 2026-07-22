@@ -143,9 +143,12 @@ services:
     environment:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER no definido}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}@pgbouncer:5432/prefect?prepared_statement_cache_size=0
       PREFECT_UI_API_URL: http://${SERVER_IP:-localhost}:4200/api
+      TZ: America/Guayaquil
     volumes:
       - /data/datascience/prefect:/root/.prefect
-      - ./flows:/flows
+      - ./flows:/flows/org                          # Flows organizacionales (repo git)
+      - /data/datascience/flows:/flows/shared       # Flows compartidos entre usuarios
+      - /data/datascience/notebooks:/flows/users    # Flows de usuarios en sus carpetas
     ports:
       - "4200:4200"
     depends_on:
@@ -159,17 +162,70 @@ services:
       timeout: 5s
       retries: 8
       start_period: 30s
- 
+
+  # ─── PREFECT WORKER ────────────────────────────────────────────────────────
+  # El servicio `prefect` de arriba es solo el server (API + UI + DB); no
+  # ejecuta flows. Este worker hace polling al work pool "default" y corre
+  # el código real de los flows deployados (org/shared/users).
+  prefect-worker:
+    build: ./prefect-worker
+    container_name: ds_prefect_worker
+    restart: unless-stopped
+    # Trae automáticamente TODO lo del .env (cualquier var nueva, sin tener
+    # que editar este archivo); los mapeos de abajo (`environment:`) siguen
+    # existiendo para renombrar lo que los flows esperan con otro nombre
+    # (ej. MINIO_ACCESS_KEY <- MINIO_ROOT_USER) y tienen prioridad sobre esto.
+    env_file: .env
+    command: >
+      /bin/sh -c "
+      prefect work-pool create default --type process || true;
+      prefect worker start --pool default --type process
+      "
+    environment:
+      PREFECT_API_URL: http://prefect:4200/api
+      POSTGRES_HOST: pgbouncer
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER no definido}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      OPENAI_API_KEY_TH: ${OPENAI_API_KEY_TH:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TZ: America/Guayaquil
+      # Permite `from common_tasks import ...` desde cualquier flow (org/shared/users)
+      PYTHONPATH: /flows/org:/flows/shared
+    volumes:
+      - ./flows:/flows/org                          # Flows organizacionales (repo git)
+      - /data/datascience/flows:/flows/shared       # Flows compartidos entre usuarios
+      - /data/datascience/notebooks:/flows/users    # Flows de usuarios en sus carpetas
+    depends_on:
+      prefect:
+        condition: service_healthy
+      mlflow:
+        condition: service_started   # started, no healthy — mlflow ya corre aunque tarde en responder HTTP
+    networks:
+      - ds_network
+
   # ─── JUPYTERHUB ────────────────────────────────────────────────────────────
   jupyterhub:
     build: ./jupyterhub
     container_name: ds_jupyterhub
     restart: unless-stopped
+    # Trae automáticamente TODO lo del .env a este contenedor. El segundo
+    # salto (Hub -> proceso del notebook de cada usuario) lo hace
+    # c.Spawner.environment en jupyterhub_config.py, reenviando por prefijo
+    # conocido lo que esté aquí -- ver el comentario ahí para el porqué.
+    env_file: .env
     volumes:
       - /data/datascience/jupyterhub:/srv/jupyterhub
       - /data/datascience/notebooks:/home
       - ./notebooks:/srv/notebooks/examples
-      - ./flows:/srv/flows
+      - ./flows:/srv/flows/org
+      - /data/datascience/flows:/srv/flows/shared    # Flows compartidos accesibles
     ports:
       - "8000:8000"
     environment:
@@ -181,6 +237,8 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       PREFECT_API_URL: http://prefect:4200/api
       GIT_PYTHON_REFRESH: quiet
+      OPENAI_API_KEY_TH: ${OPENAI_API_KEY_TH:-}
+      TZ: America/Guayaquil
     depends_on:
       pgbouncer:
         condition: service_healthy

@@ -1,7 +1,14 @@
 FROM quay.io/jupyterhub/jupyterhub:4.0
 
+# Necesario para que TZ=America/Guayaquil (docker-compose.yml) realmente
+# cambie datetime.now(): sin el paquete tzdata, glibc no encuentra la zona
+# y todo corre en UTC aunque la env var esté seteada.
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/Guayaquil
+
 # System libraries required by numpy, scikit-learn, mlflow native extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     libgomp1 \
     libopenblas-base \
     gcc \

@@ -10,7 +10,8 @@
 - PostgreSQL stores relational metadata for MLflow, Prefect and JupyterHub.
 - MinIO stores object data and MLflow artifacts in S3-compatible buckets.
 - MLflow uses PostgreSQL for backend metadata and MinIO bucket `artifacts` for artifacts.
-- Prefect uses PostgreSQL for API/server state and mounts `./flows` into the container.
+- Prefect uses PostgreSQL for API/server state. The `prefect` service is only the server (API + UI); it does not execute flow code.
+- `prefect-worker` is a separate service, built from `./prefect-worker`, that polls the `default` work pool and actually executes deployed flows. Without it, deployments/schedules stay `Scheduled`/`Late` forever.
 - JupyterHub provides notebook access for users and mounts user homes from `/data/datascience/notebooks`.
 - Streamlit serves dashboards from `dashboards/app.py` and reads data from MinIO.
 - `minio-setup` is a one-shot bootstrap container that creates buckets and can be safely recreated.
@@ -32,19 +33,44 @@ MinIO provides S3-compatible object storage with four automatically created buck
 
 All buckets are created automatically on first stack startup by the `minio-setup` bootstrap service.
 
+## Prefect flows: org / shared / users
+Prefect (`prefect` server, `prefect-worker`, `jupyterhub`) mounts three separate flow locations, each for a different purpose:
+
+- **`/flows/org`** (`/srv/flows/org` in JupyterHub) → bind-mounted from `./flows` (this git repo). Organizational/template flows, e.g. `flows/analisis_chat_th.py`. Edited via git, not from inside a container.
+- **`/flows/shared`** (`/srv/flows/shared` in JupyterHub) → bind-mounted from `/data/datascience/flows`. Reusable tasks/utilities imported by multiple users' flows (e.g. `common_tasks.py`).
+- **`/flows/users`** (JupyterHub sees the same data as `/home`, since both come from `/data/datascience/notebooks`) → each user's per-user flow files live next to their notebooks, e.g. `/data/datascience/notebooks/{username}/{project}/prefect_flow.py`.
+
+Correct workflow:
+1. Users develop and test notebooks in JupyterHub under `/home/{username}/...`.
+2. They convert working code into a `@flow`/`@task` Python file in the same folder.
+3. **Deploy from a JupyterHub terminal** (`prefect deploy my_flow.py:my_flow --name "..." --pool default`) — not from `docker exec -it ds_prefect`. The `prefect` service image is a bare server image without `pandas`/`boto3`/`psycopg2`/`torch`/etc., and it has no `PREFECT_API_URL` set, so a CLI `prefect deploy` run there either fails to import the flow or silently registers against an ephemeral local API instead of the real server. JupyterHub already has both the flow dependencies (see `jupyterhub/Dockerfile`) and `PREFECT_API_URL=http://prefect:4200/api` wired via `c.Spawner.environment`.
+4. Create/manage the schedule from the Prefect UI (`http://SERVER_IP:4200`) or CLI.
+5. `prefect-worker` (work pool `default`, type `process`) is what actually picks up and executes scheduled/triggered runs. If it is down, runs stay `Scheduled`/`Late` indefinitely — check `docker compose ps prefect-worker` and `docker exec -it ds_prefect prefect work-pool ls` when jobs don't run.
+
+Shared task code: [flows/common_tasks.py](flows/common_tasks.py) holds reusable Postgres/MinIO tasks (`connect_postgres`, `conectar_minio`, `leer_query`, `subir_dataframe_csv`, ...). It lives in `flows/` (git) rather than `/data/datascience/flows` because it's infrastructure code shared by every flow, not a one-off script — treat it like real code (reviewed, versioned). Any flow (org, shared, or per-user) imports it directly with `from common_tasks import ...`; this works because `PYTHONPATH` includes `/flows/org:/flows/shared` (`prefect-worker` in `docker-compose.yml`) / `/srv/flows/org:/srv/flows/shared` (`jupyterhub_config.py` → `c.Spawner.environment`), so no relative-import gymnastics are needed regardless of where the calling flow lives.
+
+Full step-by-step (notebook → flow → deploy → schedule → run-now → pause) is in [PREFECT_JUPYTER_GUIDE.md](PREFECT_JUPYTER_GUIDE.md).
+
 ## Important paths
 - `docker-compose.yml`: source of truth for services, ports, dependencies and bind mounts.
 - `sql/init-db.sql`: initial bootstrap for PostgreSQL databases. It only runs on first initialization of an empty Postgres data directory.
 - `jupyterhub/jupyterhub_config.py`: JupyterHub authentication, spawner and persistence settings.
 - `jupyterhub/Dockerfile`: JupyterHub image with Python/data tooling.
 - `mlflow/Dockerfile`: MLflow server image.
+- `prefect-worker/Dockerfile`: Prefect worker image. Installs the data/ML subset of `jupyterhub/Dockerfile` (`pandas`, `boto3`, `psycopg2-binary`, `openai`, `s3fs`, `scikit-learn`, `duckdb`, `polars-lts-cpu`, `mlflow`, `torch`, `transformers`, ...) so flows converted from notebooks are likely to just work — deliberately excludes Jupyter/Streamlit-only packages (`jupyterhub`, `jupyterlab`, `notebook`, `ipykernel`, `jupyterhub-nativeauthenticator`, `streamlit`), which a headless worker never needs. If a flow needs a library that's in `jupyterhub/Dockerfile` but missing here, add it here too.
+- `flows/`: organizational flows tracked in git (mounted as `/flows/org` in `prefect`/`prefect-worker`, `/srv/flows/org` in `jupyterhub`), including the shared [flows/common_tasks.py](flows/common_tasks.py).
+- `pgbouncer/pgbouncer.ini`, `pgbouncer/generate-config.sh`: reference PgBouncer config. Not currently mounted by the `pgbouncer` service in `docker-compose.yml` (it's configured purely via env vars) — keep this in mind before assuming a change here has any runtime effect.
+- `diagrams/`: architecture diagram sources (`mermaid.txt`, `dbdiagram.txt`), documentation only, not used by any container.
 - `dashboards/app.py`: Streamlit entrypoint.
 - `ADITONAL.md`: operational notes and troubleshooting commands.
+- `PREFECT_JUPYTER_GUIDE.md`: end-user runbook for going notebook → flow → deployment → schedule from JupyterHub.
+- `MLFLOW_GUIDE.md`: end-user runbook for tracking experiments and logging/loading models from JupyterHub, Prefect flows, and from a machine outside the server.
 
 ## Persistence model
 - Postgres data lives in `/data/datascience/postgres`.
 - MinIO objects live in `/data/datascience/minio`.
 - Prefect local state lives in `/data/datascience/prefect`.
+- Organizational/shared/user flow code is not separately "owned" by Prefect: `/flows/org` comes from the git repo (`./flows`), `/flows/shared` from `/data/datascience/flows`, `/flows/users` from `/data/datascience/notebooks` (see "Prefect flows" section above). `prefect-worker` is stateless — it has no dedicated persistence directory, it only reads these flow mounts.
 - JupyterHub cookie secret and local files live in `/data/datascience/jupyterhub`.
 - User notebooks and home directories live in `/data/datascience/notebooks`.
 - JupyterHub is configured to persist hub state in PostgreSQL database `jupyterhub`; legacy SQLite files may still exist in `/srv/jupyterhub` from older runs.
@@ -52,12 +78,15 @@ All buckets are created automatically on first stack startup by the `minio-setup
 ## Service relationships
 - `mlflow` depends on healthy `postgres` and healthy `minio`.
 - `prefect` depends on healthy `postgres`.
+- `prefect-worker` depends on healthy `prefect`.
 - `jupyterhub` depends on healthy `postgres` and started `mlflow`.
 - `streamlit` depends on `minio` and `mlflow`.
 
 ## Dev environment tips
 - Start from the repository root when running Docker Compose commands.
-- Check `.env` before running the stack; the required variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `JUPYTERHUB_ADMIN`, and `SERVER_IP`.
+- Check `.env` before running the stack (see `.env.example`); the required variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `JUPYTERHUB_ADMIN`, and `SERVER_IP`. `OPENAI_API_KEY_TH` is optional — flows that use it (e.g. `flows/analisis_chat_th.py`) degrade gracefully and skip the OpenAI-dependent step when it's unset.
+- `jupyterhub` and `prefect-worker` use `env_file: .env`, so any variable added to `.env` automatically becomes available in those two containers — no `docker-compose.yml` edit needed for that first hop. The second hop (Hub container → each user's spawned single-user process) is separate: `c.Spawner.environment` in `jupyterhub/jupyterhub_config.py` only forwards variables whose name starts with a known credential prefix (`POSTGRES_`, `MINIO_`, `AWS_`, `MLFLOW_`, `PREFECT_`, `OPENAI_`, `OPEN_API_`, `SERVER_IP`) — deliberately not a full `os.environ` passthrough, to avoid leaking JupyterHub's own internal secrets (API token, cookie secret) into every user's notebook. A new `.env` var only reaches user notebooks automatically if its name matches one of those prefixes; otherwise add the prefix (or the exact name) to the tuple in `jupyterhub_config.py`. `prefect` (the server) and `postgres`/`minio` do not use `env_file` — they keep their required vars explicit with `${VAR:?...}` validation, which `env_file` would silently skip.
+- `TZ=America/Guayaquil` alone does not change `datetime.now()` inside a container unless the `tzdata` package is installed in that image (see `jupyterhub/Dockerfile`, `prefect-worker/Dockerfile`). Separately, Prefect cron schedules default to UTC unless a `timezone` is set explicitly when creating the schedule — the container's `TZ` has no effect on when a schedule fires (see [PREFECT_JUPYTER_GUIDE.md](PREFECT_JUPYTER_GUIDE.md), step 6).
 - Create host persistence directories before first boot if they do not exist under `/data/datascience`.
 - Prefer `docker compose up -d service_name` or `docker compose restart service_name` for targeted work instead of restarting the full stack.
 - If you change `docker-compose.yml`, validate it with `docker compose config` before restarting services.
@@ -78,6 +107,7 @@ All buckets are created automatically on first stack startup by the `minio-setup
 - For JupyterHub changes, check startup logs and confirm tables exist in database `jupyterhub`.
 - For MLflow changes, confirm the UI loads and artifact logging still writes to MinIO.
 - For Prefect changes, confirm `http://SERVER_IP:4200/api` responds and the server starts cleanly.
+- For `prefect-worker` changes, rebuild with `docker compose build prefect-worker`, then confirm it appears as a healthy/subscribed worker via `docker exec -it ds_prefect prefect work-pool ls` and that a manually triggered flow run actually transitions out of `Scheduled`/`Pending`.
 - For Streamlit changes, confirm `http://SERVER_IP:8501` loads without runtime errors.
 
 ## Data safety rules

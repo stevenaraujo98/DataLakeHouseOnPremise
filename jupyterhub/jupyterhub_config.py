@@ -40,19 +40,42 @@ c.Spawner.pre_spawn_hook = pre_spawn_hook
 # Permitir ejecución como root dentro del contenedor
 c.Spawner.cmd = ['jupyterhub-singleuser', '--allow-root']
 
-# Reenviar variables de entorno de MinIO y MLflow a los kernels de notebook
+# Reenviar credenciales a los notebooks/terminales de TODOS los usuarios.
+#
+# Este contenedor (ds_jupyterhub) ya tiene en su propio os.environ tanto lo
+# de `env_file: .env` (docker-compose.yml) como los renames explícitos del
+# `environment:` de este servicio (ej. AWS_ACCESS_KEY_ID <- MINIO_ROOT_USER
+# para MLflow/boto3). Reenviamos por PREFIJO conocido en vez de listar cada
+# variable a mano, para que cualquier credencial nueva que agregues al .env con
+# uno de estos prefijos (Postgres, MinIO, AWS, MLflow, Prefect, OpenAI)
+# quede disponible automáticamente para todos, sin tocar este archivo.
+#
+# Ojo: por eso NO reenviamos os.environ completo (`**os.environ` a secas)
+# -- este mismo contenedor también tiene secretos internos de JupyterHub
+# (JUPYTERHUB_API_TOKEN, cookie secret, etc.) que no deben terminar en el
+# notebook de cada usuario.
+_PASSTHROUGH_PREFIXES = (
+    'POSTGRES_', 'MINIO_', 'AWS_', 'MLFLOW_',
+    'PREFECT_', 'OPENAI_', 'OPEN_API_', 'SERVER_IP',
+)
 c.Spawner.environment = {
-    # Credenciales S3-compatibles requeridas por MLflow/boto3
-    'AWS_ACCESS_KEY_ID':     os.environ.get('AWS_ACCESS_KEY_ID', ''),
-    'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY', ''),
-    'MLFLOW_S3_ENDPOINT_URL': os.environ.get('MLFLOW_S3_ENDPOINT_URL', ''),
-    # URI del servidor MLflow
-    'MLFLOW_TRACKING_URI':   os.environ.get('MLFLOW_TRACKING_URI', ''),
-    # URL del servidor Prefect dedicado
-    'PREFECT_API_URL':        os.environ.get('PREFECT_API_URL', ''),
-    # Silenciar advertencia de Git en MLflow
-    'GIT_PYTHON_REFRESH':    'quiet',
+    key: value
+    for key, value in os.environ.items()
+    if key.startswith(_PASSTHROUGH_PREFIXES)
 }
+c.Spawner.environment.update({
+    # Nombres que esperan flows/common_tasks.py y los flows (distintos de
+    # los nombres crudos del .env) -- igual que en el `environment:` de
+    # prefect-worker en docker-compose.yml.
+    'POSTGRES_HOST':    'pgbouncer',
+    'MINIO_ENDPOINT':   'http://minio:9000',
+    'MINIO_ACCESS_KEY': os.environ.get('MINIO_ROOT_USER', ''),
+    'MINIO_SECRET_KEY': os.environ.get('MINIO_ROOT_PASSWORD', ''),
+    # Silenciar advertencia de Git en MLflow
+    'GIT_PYTHON_REFRESH': 'quiet',
+    # Permite `from common_tasks import ...` desde cualquier notebook/flow
+    'PYTHONPATH': '/srv/flows/org:/srv/flows/shared',
+})
 
 # IP y puerto
 c.JupyterHub.ip = '0.0.0.0'
