@@ -11,7 +11,7 @@
 - MinIO stores object data and MLflow artifacts in S3-compatible buckets.
 - MLflow uses PostgreSQL for backend metadata and MinIO bucket `artifacts` for artifacts.
 - Prefect uses PostgreSQL for API/server state. The `prefect` service is only the server (API + UI); it does not execute flow code.
-- `prefect-worker` is a separate service, built from `./prefect-worker`, that polls the `default` work pool and actually executes deployed flows. Without it, deployments/schedules stay `Scheduled`/`Late` forever.
+- `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards` are three separate services, all built from `./prefect-worker`, that actually execute deployed flows — one per work pool, grouped by workload type (not by project/unit). Without the matching worker running, a deployment's runs stay `Scheduled`/`Late` forever. See "Prefect work pools" below.
 - JupyterHub provides notebook access for users and mounts user homes from `/data/datascience/notebooks`.
 - Streamlit serves dashboards from `dashboards/app.py` and reads data from MinIO.
 - `minio-setup` is a one-shot bootstrap container that creates buckets and can be safely recreated.
@@ -43,9 +43,20 @@ Prefect (`prefect` server, `prefect-worker`, `jupyterhub`) mounts three separate
 Correct workflow:
 1. Users develop and test notebooks in JupyterHub under `/home/{username}/...`.
 2. They convert working code into a `@flow`/`@task` Python file in the same folder.
-3. **Deploy from a JupyterHub terminal** (`prefect deploy my_flow.py:my_flow --name "..." --pool default`) — not from `docker exec -it ds_prefect`. The `prefect` service image is a bare server image without `pandas`/`boto3`/`psycopg2`/`torch`/etc., and it has no `PREFECT_API_URL` set, so a CLI `prefect deploy` run there either fails to import the flow or silently registers against an ephemeral local API instead of the real server. JupyterHub already has both the flow dependencies (see `jupyterhub/Dockerfile`) and `PREFECT_API_URL=http://prefect:4200/api` wired via `c.Spawner.environment`.
+3. **Deploy from a JupyterHub terminal** (`prefect deploy my_flow.py:my_flow --name "..." --pool <pool>`) — not from `docker exec -it ds_prefect`. The `prefect` service image is a bare server image without `pandas`/`boto3`/`psycopg2`/`torch`/etc., and it has no `PREFECT_API_URL` set, so a CLI `prefect deploy` run there either fails to import the flow or silently registers against an ephemeral local API instead of the real server. JupyterHub already has both the flow dependencies (see `jupyterhub/Dockerfile`) and `PREFECT_API_URL=http://prefect:4200/api` wired via `c.Spawner.environment`.
 4. Create/manage the schedule from the Prefect UI (`http://SERVER_IP:4200`) or CLI.
-5. `prefect-worker` (work pool `default`, type `process`) is what actually picks up and executes scheduled/triggered runs. If it is down, runs stay `Scheduled`/`Late` indefinitely — check `docker compose ps prefect-worker` and `docker exec -it ds_prefect prefect work-pool ls` when jobs don't run.
+5. The matching worker for `<pool>` (see "Prefect work pools" below) is what actually picks up and executes scheduled/triggered runs. If it is down, runs stay `Scheduled`/`Late` indefinitely — check `docker compose ps` and `docker exec -it ds_prefect prefect work-pool ls` when jobs don't run.
+
+## Prefect work pools
+Three work pools/workers exist, grouped by **workload type**, not by project or organizational unit — a concurrency limit is a resource control, and projects of the same type share a resource profile even across different units (e.g. TH chat analysis and academic chat analysis are both light DB+OpenAI calls; academic-risk-model training and career-planning-model training are both heavy CPU/RAM):
+
+| Pool | Worker service | `--concurrency-limit` | For |
+|---|---|---|---|
+| `chats` | `prefect-worker-chats` | 3 | n8n chat analysis per unit (TH, académico, bienestar, ...) — light DB read + sentiment model + OpenAI classification |
+| `training` | `prefect-worker-training` | 1 | Model training (riesgo académico, planificación académica, ODS, carreras, ...) — heaviest CPU/RAM; deliberately serialized so two trainings never compete for memory on the same host |
+| `dashboards` | `prefect-worker-dashboards` | 20 | Data processing feeding dashboards — many, lighter ETL-style jobs |
+
+Pick the pool by workload type at deploy time (`--pool chats`/`training`/`dashboards`); distinguish projects/units within a pool with `--tag` (e.g. `--tag th`, `--tag academico`) instead of creating a new pool per unit — that keeps the number of worker containers bounded as new projects get added. If a new workload doesn't fit any of the three, decide deliberately before adding a fourth pool+worker (copy the `x-prefect-worker-common` anchor block in `docker-compose.yml`) — don't default to `chats`/`dashboards` just because they exist. Changing an existing pool's concurrency limit requires `prefect work-pool update <pool> --concurrency-limit N` — the `prefect work-pool create ... || true` in each worker's `command` is idempotent-safe but does not update an already-existing pool.
 
 Shared task code: [flows/common_tasks.py](flows/common_tasks.py) holds reusable Postgres/MinIO tasks (`connect_postgres`, `conectar_minio`, `leer_query`, `subir_dataframe_csv`, ...). It lives in `flows/` (git) rather than `/data/datascience/flows` because it's infrastructure code shared by every flow, not a one-off script — treat it like real code (reviewed, versioned). Any flow (org, shared, or per-user) imports it directly with `from common_tasks import ...`; this works because `PYTHONPATH` includes `/flows/org:/flows/shared` (`prefect-worker` in `docker-compose.yml`) / `/srv/flows/org:/srv/flows/shared` (`jupyterhub_config.py` → `c.Spawner.environment`), so no relative-import gymnastics are needed regardless of where the calling flow lives.
 
@@ -57,7 +68,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - `jupyterhub/jupyterhub_config.py`: JupyterHub authentication, spawner and persistence settings.
 - `jupyterhub/Dockerfile`: JupyterHub image with Python/data tooling.
 - `mlflow/Dockerfile`: MLflow server image.
-- `prefect-worker/Dockerfile`: Prefect worker image. Installs the data/ML subset of `jupyterhub/Dockerfile` (`pandas`, `boto3`, `psycopg2-binary`, `openai`, `s3fs`, `scikit-learn`, `duckdb`, `polars-lts-cpu`, `mlflow`, `torch`, `transformers`, ...) so flows converted from notebooks are likely to just work — deliberately excludes Jupyter/Streamlit-only packages (`jupyterhub`, `jupyterlab`, `notebook`, `ipykernel`, `jupyterhub-nativeauthenticator`, `streamlit`), which a headless worker never needs. If a flow needs a library that's in `jupyterhub/Dockerfile` but missing here, add it here too.
+- `prefect-worker/Dockerfile`: shared build for all three Prefect worker services (`prefect-worker-chats`/`-training`/`-dashboards`, see "Prefect work pools" above) — one image, one build context, reused via the `x-prefect-worker-common` YAML anchor in `docker-compose.yml`. Installs the data/ML subset of `jupyterhub/Dockerfile` (`pandas`, `boto3`, `psycopg2-binary`, `openai`, `s3fs`, `scikit-learn`, `duckdb`, `polars-lts-cpu`, `mlflow`, `torch`, `transformers`, ...) so flows converted from notebooks are likely to just work — deliberately excludes Jupyter/Streamlit-only packages (`jupyterhub`, `jupyterlab`, `notebook`, `ipykernel`, `jupyterhub-nativeauthenticator`, `streamlit`), which a headless worker never needs. If a flow needs a library that's in `jupyterhub/Dockerfile` but missing here, add it here too — it benefits all three workers at once.
 - `flows/`: organizational flows tracked in git (mounted as `/flows/org` in `prefect`/`prefect-worker`, `/srv/flows/org` in `jupyterhub`), including the shared [flows/common_tasks.py](flows/common_tasks.py).
 - `pgbouncer/pgbouncer.ini`, `pgbouncer/generate-config.sh`: reference PgBouncer config. Not currently mounted by the `pgbouncer` service in `docker-compose.yml` (it's configured purely via env vars) — keep this in mind before assuming a change here has any runtime effect.
 - `diagrams/`: architecture diagram sources (`mermaid.txt`, `dbdiagram.txt`), documentation only, not used by any container.
@@ -78,7 +89,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 ## Service relationships
 - `mlflow` depends on healthy `postgres` and healthy `minio`.
 - `prefect` depends on healthy `postgres`.
-- `prefect-worker` depends on healthy `prefect`.
+- `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards` each depend on healthy `prefect` and started `mlflow`.
 - `jupyterhub` depends on healthy `postgres` and started `mlflow`.
 - `streamlit` depends on `minio` and `mlflow`.
 
@@ -107,7 +118,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - For JupyterHub changes, check startup logs and confirm tables exist in database `jupyterhub`.
 - For MLflow changes, confirm the UI loads and artifact logging still writes to MinIO.
 - For Prefect changes, confirm `http://SERVER_IP:4200/api` responds and the server starts cleanly.
-- For `prefect-worker` changes, rebuild with `docker compose build prefect-worker`, then confirm it appears as a healthy/subscribed worker via `docker exec -it ds_prefect prefect work-pool ls` and that a manually triggered flow run actually transitions out of `Scheduled`/`Pending`.
+- For `prefect-worker/Dockerfile` changes, rebuild all three with `docker compose build prefect-worker-chats prefect-worker-training prefect-worker-dashboards` (they share one build), then confirm each appears as a subscribed worker via `docker exec -it ds_prefect prefect work-pool ls` and that a manually triggered flow run in the relevant pool actually transitions out of `Scheduled`/`Pending`.
 - For Streamlit changes, confirm `http://SERVER_IP:8501` loads without runtime errors.
 
 ## Data safety rules

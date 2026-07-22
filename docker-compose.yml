@@ -1,5 +1,46 @@
+# Config compartida por los 3 workers de Prefect (ver más abajo, sección
+# PREFECT WORKERS): mismo build/imagen, mismas credenciales, mismos mounts
+# de flows. Lo único que cambia entre uno y otro es el pool al que hacen
+# polling y su límite de concurrencia -- ver PREFECT_JUPYTER_GUIDE.md, paso 5.
+x-prefect-worker-common: &prefect-worker-common
+  build: ./prefect-worker
+  restart: unless-stopped
+  # Trae automáticamente TODO lo del .env (cualquier var nueva, sin tener
+  # que editar este archivo); los mapeos de abajo (`environment:`) siguen
+  # existiendo para renombrar lo que los flows esperan con otro nombre
+  # (ej. MINIO_ACCESS_KEY <- MINIO_ROOT_USER) y tienen prioridad sobre esto.
+  env_file: .env
+  environment:
+    PREFECT_API_URL: http://prefect:4200/api
+    POSTGRES_HOST: pgbouncer
+    POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER no definido}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}
+    MINIO_ENDPOINT: http://minio:9000
+    MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+    MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+    AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    OPENAI_API_KEY_TH: ${OPENAI_API_KEY_TH:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    TZ: America/Guayaquil
+    # Permite `from common_tasks import ...` desde cualquier flow (org/shared/users)
+    PYTHONPATH: /flows/org:/flows/shared
+  volumes:
+    - ./flows:/flows/org                          # Flows organizacionales (repo git)
+    - /data/datascience/flows:/flows/shared       # Flows compartidos entre usuarios
+    - /data/datascience/notebooks:/flows/users    # Flows de usuarios en sus carpetas
+  depends_on:
+    prefect:
+      condition: service_healthy
+    mlflow:
+      condition: service_started   # started, no healthy — mlflow ya corre aunque tarde en responder HTTP
+  networks:
+    - ds_network
+
 services:
- 
+
   # ─── POSTGRES ──────────────────────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg17
@@ -163,52 +204,58 @@ services:
       retries: 8
       start_period: 30s
 
-  # ─── PREFECT WORKER ────────────────────────────────────────────────────────
+  # ─── PREFECT WORKERS ───────────────────────────────────────────────────────
   # El servicio `prefect` de arriba es solo el server (API + UI + DB); no
-  # ejecuta flows. Este worker hace polling al work pool "default" y corre
-  # el código real de los flows deployados (org/shared/users).
-  prefect-worker:
-    build: ./prefect-worker
-    container_name: ds_prefect_worker
-    restart: unless-stopped
-    # Trae automáticamente TODO lo del .env (cualquier var nueva, sin tener
-    # que editar este archivo); los mapeos de abajo (`environment:`) siguen
-    # existiendo para renombrar lo que los flows esperan con otro nombre
-    # (ej. MINIO_ACCESS_KEY <- MINIO_ROOT_USER) y tienen prioridad sobre esto.
-    env_file: .env
+  # ejecuta flows. Cada worker de abajo hace polling a UN pool y corre el
+  # código real de los flows deployados ahí (org/shared/users). Un pool
+  # nuevo sin worker propio = runs que se quedan en "Scheduled" para siempre.
+  #
+  # Agrupados por TIPO de carga (no por unidad/proyecto individual) porque
+  # el límite de concurrencia es sobre todo un control de recursos del
+  # servidor, y proyectos del mismo tipo comparten perfil de recursos aunque
+  # sean de unidades distintas. Filtra por unidad con --tag al deployar
+  # (ej. --tag th, --tag academico), no con un pool nuevo por unidad.
+  #
+  # Si cambias el --concurrency-limit de un pool que ya existe, el
+  # `work-pool create ... || true` de abajo NO lo actualiza (create no-opea
+  # si ya existe) -- usa `prefect work-pool update <pool> --concurrency-limit N`.
+
+  # Chats de n8n por unidad (TH, académico, bienestar, ...): lectura DB +
+  # modelo de sentimiento + OpenAI. Bound más por rate limit/costo de OpenAI
+  # que por CPU local -- algo de paralelismo entre unidades está bien.
+  prefect-worker-chats:
+    <<: *prefect-worker-common
+    container_name: ds_prefect_worker_chats
     command: >
       /bin/sh -c "
-      prefect work-pool create default --type process || true;
-      prefect worker start --pool default --type process
+      prefect work-pool create chats --type process --concurrency-limit 3 || true;
+      prefect worker start --pool chats --type process
       "
-    environment:
-      PREFECT_API_URL: http://prefect:4200/api
-      POSTGRES_HOST: pgbouncer
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER no definido}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD no definido}
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MLFLOW_TRACKING_URI: http://mlflow:5000
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      OPENAI_API_KEY_TH: ${OPENAI_API_KEY_TH:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      TZ: America/Guayaquil
-      # Permite `from common_tasks import ...` desde cualquier flow (org/shared/users)
-      PYTHONPATH: /flows/org:/flows/shared
-    volumes:
-      - ./flows:/flows/org                          # Flows organizacionales (repo git)
-      - /data/datascience/flows:/flows/shared       # Flows compartidos entre usuarios
-      - /data/datascience/notebooks:/flows/users    # Flows de usuarios en sus carpetas
-    depends_on:
-      prefect:
-        condition: service_healthy
-      mlflow:
-        condition: service_started   # started, no healthy — mlflow ya corre aunque tarde en responder HTTP
-    networks:
-      - ds_network
+
+  # Entrenamiento de modelos (riesgo académico, planificación académica,
+  # ODS, carreras, ...): lo más pesado en CPU/RAM. Concurrency-limit 1 a
+  # propósito -- correr dos entrenamientos a la vez en el mismo servidor es
+  # el escenario que puede tumbarlo por memoria.
+  prefect-worker-training:
+    <<: *prefect-worker-common
+    container_name: ds_prefect_worker_training
+    command: >
+      /bin/sh -c "
+      prefect work-pool create training --type process --concurrency-limit 1 || true;
+      prefect worker start --pool training --type process
+      "
+
+  # Procesamiento de datos para dashboards: jobs más livianos tipo ETL, pero
+  # van a ser varios proyectos. Límite más alto para dar throughput sin
+  # dejar que se amontonen todos a la vez sin control.
+  prefect-worker-dashboards:
+    <<: *prefect-worker-common
+    container_name: ds_prefect_worker_dashboards
+    command: >
+      /bin/sh -c "
+      prefect work-pool create dashboards --type process --concurrency-limit 20 || true;
+      prefect worker start --pool dashboards --type process
+      "
 
   # ─── JUPYTERHUB ────────────────────────────────────────────────────────────
   jupyterhub:

@@ -84,28 +84,80 @@ deployar.
 
 ## 4. Deployar (registrar el flow en Prefect Server)
 
+Revisar también el paso 5 para elegir el pool.  
+El entrypoint va con el nombre real de la función @flow.
 Desde la misma terminal:
-
 ```bash
-prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default
+prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default --tag th
+
+prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
 ```
 
+- El `entrypoint` (`archivo.py:nombre`) tiene que ser el **nombre real de la
+  función Python** decorada con `@flow`, no el nombre del archivo ni el
+  `name="..."` que le pusiste al `@flow(...)`. En `analisis_chat_th.py` la
+  función se llama `analisis_chat_th_flow` — si pones otra cosa, `prefect
+  deploy` falla con `MissingFlowError` y te sugiere el nombre correcto.
 - El CLI puede hacerte 1-2 preguntas interactivas la primera vez (ej. si
   quieres agregar un schedule ahora). Si no quieres que se ejecute todavía
-  automáticamente, responde que no / omite el schedule — ver el paso 6.
+  automáticamente, responde que no / omite el schedule — ver el paso 7.
 - `--pool default` es el work pool que ya existe (lo crea automáticamente
-  `prefect-worker` al arrancar). No necesitas crearlo tú.
+  `prefect-worker` al arrancar). Si quieres usar otro pool, ver el paso 5
+  antes de deployar.
 - Si prefieres evitar los prompts interactivos: `export PREFECT_CLI_PROMPT=false`
   antes de correr `prefect deploy`.
 
 En este punto el deployment existe en `http://SERVER_IP:4200/deployments`,
 pero **todavía no se ejecuta solo** a menos que le hayas puesto un schedule.
 
-## 5. Ejecutarlo inmediatamente (sin esperar ninguna programación)
+## 5. ¿Qué work pool uso?
 
-Esto es lo que quieres para "mandarlo ahora": crea un flow run que
-`prefect-worker` recoge de inmediato (normalmente en segundos) porque el
-worker siempre está haciendo polling.
+Hay 3 pools, cada uno con su propio worker corriendo permanentemente,
+agrupados por **tipo de carga** (no por unidad/proyecto individual — un
+concurrency-limit es sobre todo un control de recursos del servidor, y
+proyectos del mismo tipo se parecen en eso aunque sean de unidades
+distintas):
+
+| Pool | `--concurrency-limit` | Para |
+|---|---|---|
+| `chats` | 3 | Análisis de chats de n8n por unidad (TH, académico, bienestar, ...) |
+| `training` | 1 | Entrenamiento de modelos (riesgo académico, planificación académica, ODS, carreras, ...) — serializado a propósito para no saturar CPU/RAM del servidor |
+| `dashboards` | 20 | Procesamiento de datos para dashboards — jobs más livianos, pero van a ser varios |
+
+```bash
+prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool chats --tag th
+```
+
+Distingue proyecto/unidad con `--tag` (`--tag th`, `--tag academico`, ...),
+no creando un pool nuevo por unidad — así el número de workers no crece sin
+control a medida que agregues proyectos. Filtra por tag en la UI.
+
+Si tu flow no encaja claramente en ninguno de los 3 (ej. un tipo de carga
+totalmente nuevo), no lo metas a la fuerza en `chats` o `dashboards` solo
+porque ya existen — avisa para decidir si conviene un cuarto pool+worker
+(se agrega copiando el bloque `x-prefect-worker-common` de
+`docker-compose.yml`).
+
+`--pool <nombre>` **no se crea solo**: si el pool no existe, `prefect deploy`
+falla (o pregunta interactivamente, pero nunca lo crea en modo no
+interactivo). Los 3 de arriba ya existen — se crean solos la primera vez que
+arranca cada worker (`prefect work-pool create ... || true` en su
+`command`). Si más adelante cambias el `--concurrency-limit` de uno que ya
+existe, ese `|| true` no lo actualiza (create no-opea si ya existe); usa:
+```bash
+prefect work-pool update chats --concurrency-limit 5
+```
+
+> Si ya deployaste algo a `--pool default` antes de que existieran estos 3
+> pools (ya no tiene worker propio), vuelve a deployarlo con `--pool` apuntando
+> al que le corresponda por tipo — mismo comando de deploy, solo cambia esa
+> bandera; ver paso 9.
+
+## 6. Ejecutarlo inmediatamente (sin esperar ninguna programación)
+
+Esto es lo que quieres para "mandarlo ahora": crea un flow run que el
+worker de ese pool recoge de inmediato (normalmente en segundos) porque
+siempre está haciendo polling.
 
 **Desde la UI:** `Deployments` → tu deployment → botón **Run** → **Quick run**.
 
@@ -118,7 +170,7 @@ por la barra).
 
 Puedes hacer esto las veces que quieras, tenga o no un schedule configurado.
 
-## 6. Programarlo para que corra cada cierto tiempo
+## 7. Programarlo para que corra cada cierto tiempo
 
 ⚠️ **La hora del cron es independiente del `TZ` del contenedor.** Prefect
 guarda cada schedule con su propia zona horaria (por defecto UTC si no la
@@ -144,10 +196,10 @@ que `datetime.now()` dentro del código del flow, ej. el timestamp del
 nombre del Excel en `analisis_chat_th.py`, refleje la hora de Ecuador — eso
 es aparte de a qué hora dispara el schedule.)
 
-## 7. Pausar la programación sin borrar el deployment
+## 8. Pausar la programación sin borrar el deployment
 
 Útil cuando quieres dejar de correr automáticamente pero seguir pudiendo
-correrlo manualmente (paso 5) o reactivarlo después.
+correrlo manualmente (paso 6) o reactivarlo después.
 
 **Desde la UI:** en la lista de schedules del deployment, apaga el toggle
 **Active**.
@@ -159,7 +211,7 @@ prefect deployment schedule pause 'mi-flow/mi-flow-prod' <schedule_id>
 prefect deployment schedule resume 'mi-flow/mi-flow-prod' <schedule_id>
 ```
 
-## 8. Actualicé el script — ¿cómo aplico el cambio?
+## 9. Actualicé el script — ¿cómo aplico el cambio?
 
 - **Solo cambiaste la lógica interna** (mismo archivo, misma función `@flow`,
   mismos parámetros): no hace falta re-deployar. `prefect-worker` lee el
@@ -177,9 +229,9 @@ prefect deployment schedule resume 'mi-flow/mi-flow-prod' <schedule_id>
   uno duplicado, y normalmente conserva el/los schedule(s) que ya tenía.
   Confirma la versión/descripción en la UI después.
 - Para verificar el cambio sin esperar el próximo schedule, dispara un run
-  manual (paso 5) y revisa los logs.
+  manual (paso 6) y revisa los logs.
 
-## 9. Detener una ejecución que ya está corriendo
+## 10. Detener una ejecución que ya está corriendo
 
 Esto es distinto de pausar el schedule (que solo evita runs *futuros*).
 Para cancelar un run que está **en curso ahora mismo**:
@@ -196,7 +248,7 @@ La cancelación es cooperativa: si el flow está en medio de algo bloqueante
 (ej. una query SQL pesada), puede tardar unos segundos en detenerse de
 verdad.
 
-## 10. Eliminar la programación o el deployment completo
+## 11. Eliminar la programación o el deployment completo
 
 **Borrar solo un schedule** (el deployment sigue existiendo, puedes seguir
 corriéndolo manual o ponerle un schedule nuevo después):
@@ -214,14 +266,16 @@ prefect deployment delete 'mi-flow/mi-flow-prod'
 ```
 En la UI: `Deployments` → tu deployment → menú `...` → **Delete**.
 
-> Diferencia clave: *pausar* (paso 7) es reversible y mantiene el schedule
+> Diferencia clave: *pausar* (paso 8) es reversible y mantiene el schedule
 > guardado con un toggle; *eliminar* el schedule o el deployment no se
 > puede deshacer — hay que volver a crearlo.
 
-## 11. Verificar que corrió
+## 12. Verificar que corrió
 
 - UI: `http://SERVER_IP:4200/deployments/deployment/<id>` → pestaña de runs, logs por task.
-- Terminal: `docker compose logs -f prefect-worker` (en el servidor).
+- Terminal: `docker compose logs -f prefect-worker` (en el servidor; si usas un pool
+  dedicado como en el paso 5, revisa el servicio de worker correspondiente, ej.
+  `docker compose logs -f prefect-worker-th`).
 
 ---
 
@@ -229,7 +283,8 @@ En la UI: `Deployments` → tu deployment → menú `...` → **Delete**.
 
 | Síntoma | Causa probable | Qué revisar |
 |---|---|---|
-| El run se queda en `Scheduled`/`Late` para siempre | `prefect-worker` no está corriendo | `docker compose ps prefect-worker`, `docker compose logs prefect-worker` |
+| El run se queda en `Scheduled`/`Late` para siempre | No hay ningún worker escuchando el pool del deployment (`prefect-worker` está caído, o deployaste a un pool nuevo sin worker propio — ver paso 5) | `docker compose ps`, `docker exec -it ds_prefect prefect work-pool ls`, `docker compose logs <servicio-del-worker>` |
 | `ModuleNotFoundError` al correr el deployment (pero `python mi_flow.py` sí funcionó en JupyterHub) | La librería está en `jupyterhub/Dockerfile` pero no en `prefect-worker/Dockerfile` | Agrégala a `prefect-worker/Dockerfile` y `docker compose build prefect-worker` |
 | `ImportError: No module named 'common_tasks'` | `PYTHONPATH` no llegó al proceso | Verifica `PYTHONPATH` en el entorno (`echo $PYTHONPATH`); en JupyterHub reinicia tu kernel/servidor para recoger cambios de `jupyterhub_config.py` |
 | El deployment no aparece en la UI aunque el `prefect deploy` "funcionó" | Corriste `prefect deploy` desde `ds_prefect` (no desde JupyterHub) sin `PREFECT_API_URL`, y quedó en una API efímera local | Siempre deploya desde la terminal de JupyterHub, nunca con `docker exec -it ds_prefect ...` |
+| `prefect deploy ... --pool th` falla diciendo que el pool no existe | `--pool` no crea el work pool automáticamente | `prefect work-pool create th --type process` antes de deployar — ver paso 5 |
