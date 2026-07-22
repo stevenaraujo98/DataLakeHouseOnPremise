@@ -7,11 +7,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Guayaquil
 
 # Mismas libs de sistema que jupyterhub/Dockerfile (numpy, scikit-learn,
-# mlflow, duckdb usan extensiones nativas).
+# mlflow, duckdb usan extensiones nativas). Sin libopenblas-base: esta
+# imagen base (prefecthq/prefect:3-latest) corre sobre Debian trixie, donde
+# ese paquete ya no existe con ese nombre -- no hace falta de todos modos,
+# los wheels de PyPI de numpy/scipy/scikit-learn ya traen su propio OpenBLAS.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     libgomp1 \
-    libopenblas-base \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
