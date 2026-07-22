@@ -112,17 +112,18 @@ pero **todavía no se ejecuta solo** a menos que le hayas puesto un schedule.
 
 ## 5. ¿Qué work pool uso?
 
-Hay 3 pools, cada uno con su propio worker corriendo permanentemente,
-agrupados por **tipo de carga** (no por unidad/proyecto individual — un
-concurrency-limit es sobre todo un control de recursos del servidor, y
+Hay 4 pools, cada uno con su propio worker corriendo permanentemente. Los
+primeros 3 agrupan por **tipo de carga** (no por unidad/proyecto individual —
+un concurrency-limit es sobre todo un control de recursos del servidor, y
 proyectos del mismo tipo se parecen en eso aunque sean de unidades
-distintas):
+distintas); el cuarto es un comodín:
 
 | Pool | `--concurrency-limit` | Para |
 |---|---|---|
 | `chats` | 3 | Análisis de chats de n8n por unidad (TH, académico, bienestar, ...) |
 | `training` | 1 | Entrenamiento de modelos (riesgo académico, planificación académica, ODS, carreras, ...) — serializado a propósito para no saturar CPU/RAM del servidor |
 | `dashboards` | 20 | Procesamiento de datos para dashboards — jobs más livianos, pero van a ser varios |
+| `default` | 2 | Comodín: algo que todavía no encaja claramente en los 3 de arriba (pruebas puntuales, un flow nuevo mientras decides su tipo). Límite bajo a propósito porque no se sabe de antemano qué tan pesado será lo que caiga aquí. |
 
 ```bash
 prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool chats --tag th
@@ -132,26 +133,24 @@ Distingue proyecto/unidad con `--tag` (`--tag th`, `--tag academico`, ...),
 no creando un pool nuevo por unidad — así el número de workers no crece sin
 control a medida que agregues proyectos. Filtra por tag en la UI.
 
-Si tu flow no encaja claramente en ninguno de los 3 (ej. un tipo de carga
-totalmente nuevo), no lo metas a la fuerza en `chats` o `dashboards` solo
-porque ya existen — avisa para decidir si conviene un cuarto pool+worker
+`default` es para lo que no tienes claro todavía, no para "lo dejo ahí
+porque no quiero pensar en cuál usar". Si algo que aterrizó en `default`
+resulta ser recurrente, muévelo a su pool por tipo (mismo `prefect deploy`,
+solo cambia `--pool`). Si tampoco encaja en ninguno de los 4 (un tipo de
+carga totalmente nuevo y ya sabes que va a ser recurrente), avisa para
+decidir si conviene un quinto pool+worker en vez de forzarlo en `default`
 (se agrega copiando el bloque `x-prefect-worker-common` de
 `docker-compose.yml`).
 
 `--pool <nombre>` **no se crea solo**: si el pool no existe, `prefect deploy`
 falla (o pregunta interactivamente, pero nunca lo crea en modo no
-interactivo). Los 3 de arriba ya existen — se crean solos la primera vez que
+interactivo). Los 4 de arriba ya existen — se crean solos la primera vez que
 arranca cada worker (`prefect work-pool create ... || true` en su
 `command`). Si más adelante cambias el `--concurrency-limit` de uno que ya
 existe, ese `|| true` no lo actualiza (create no-opea si ya existe); usa:
 ```bash
 prefect work-pool update chats --concurrency-limit 5
 ```
-
-> Si ya deployaste algo a `--pool default` antes de que existieran estos 3
-> pools (ya no tiene worker propio), vuelve a deployarlo con `--pool` apuntando
-> al que le corresponda por tipo — mismo comando de deploy, solo cambia esa
-> bandera; ver paso 9.
 
 ## 6. Ejecutarlo inmediatamente (sin esperar ninguna programación)
 

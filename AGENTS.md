@@ -55,8 +55,9 @@ Three work pools/workers exist, grouped by **workload type**, not by project or 
 | `chats` | `prefect-worker-chats` | 3 | n8n chat analysis per unit (TH, académico, bienestar, ...) — light DB read + sentiment model + OpenAI classification |
 | `training` | `prefect-worker-training` | 1 | Model training (riesgo académico, planificación académica, ODS, carreras, ...) — heaviest CPU/RAM; deliberately serialized so two trainings never compete for memory on the same host |
 | `dashboards` | `prefect-worker-dashboards` | 20 | Data processing feeding dashboards — many, lighter ETL-style jobs |
+| `default` | `prefect-worker-default` | 2 | Catch-all for whatever doesn't yet clearly fit the three above (one-off tests, a new flow while its real type is still being decided). Deliberately low concurrency since its workload shape is unknown by definition. |
 
-Pick the pool by workload type at deploy time (`--pool chats`/`training`/`dashboards`); distinguish projects/units within a pool with `--tag` (e.g. `--tag th`, `--tag academico`) instead of creating a new pool per unit — that keeps the number of worker containers bounded as new projects get added. If a new workload doesn't fit any of the three, decide deliberately before adding a fourth pool+worker (copy the `x-prefect-worker-common` anchor block in `docker-compose.yml`) — don't default to `chats`/`dashboards` just because they exist. Changing an existing pool's concurrency limit requires `prefect work-pool update <pool> --concurrency-limit N` — the `prefect work-pool create ... || true` in each worker's `command` is idempotent-safe but does not update an already-existing pool.
+Pick the pool by workload type at deploy time (`--pool chats`/`training`/`dashboards`/`default`); distinguish projects/units within a pool with `--tag` (e.g. `--tag th`, `--tag academico`) instead of creating a new pool per unit — that keeps the number of worker containers bounded as new projects get added. If something recurring ends up parked in `default`, migrate it to its proper typed pool rather than leaving it there long-term. If a workload doesn't fit any of the four, decide deliberately before adding another pool+worker (copy the `x-prefect-worker-common` anchor block in `docker-compose.yml`) — don't default to an existing pool just because it's there. Changing an existing pool's concurrency limit requires `prefect work-pool update <pool> --concurrency-limit N` — the `prefect work-pool create ... || true` in each worker's `command` is idempotent-safe but does not update an already-existing pool.
 
 Shared task code: [flows/common_tasks.py](flows/common_tasks.py) holds reusable Postgres/MinIO tasks (`connect_postgres`, `conectar_minio`, `leer_query`, `subir_dataframe_csv`, ...). It lives in `flows/` (git) rather than `/data/datascience/flows` because it's infrastructure code shared by every flow, not a one-off script — treat it like real code (reviewed, versioned). Any flow (org, shared, or per-user) imports it directly with `from common_tasks import ...`; this works because `PYTHONPATH` includes `/flows/org:/flows/shared` (`prefect-worker` in `docker-compose.yml`) / `/srv/flows/org:/srv/flows/shared` (`jupyterhub_config.py` → `c.Spawner.environment`), so no relative-import gymnastics are needed regardless of where the calling flow lives.
 
@@ -89,7 +90,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 ## Service relationships
 - `mlflow` depends on healthy `postgres` and healthy `minio`.
 - `prefect` depends on healthy `postgres`.
-- `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards` each depend on healthy `prefect` and started `mlflow`.
+- `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards`, `prefect-worker-default` each depend on healthy `prefect` and started `mlflow`.
 - `jupyterhub` depends on healthy `postgres` and started `mlflow`.
 - `streamlit` depends on `minio` and `mlflow`.
 
@@ -118,7 +119,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - For JupyterHub changes, check startup logs and confirm tables exist in database `jupyterhub`.
 - For MLflow changes, confirm the UI loads and artifact logging still writes to MinIO.
 - For Prefect changes, confirm `http://SERVER_IP:4200/api` responds and the server starts cleanly.
-- For `prefect-worker/Dockerfile` changes, rebuild all three with `docker compose build prefect-worker-chats prefect-worker-training prefect-worker-dashboards` (they share one build), then confirm each appears as a subscribed worker via `docker exec -it ds_prefect prefect work-pool ls` and that a manually triggered flow run in the relevant pool actually transitions out of `Scheduled`/`Pending`.
+- For `prefect-worker/Dockerfile` changes, rebuild all four with `docker compose build prefect-worker-chats prefect-worker-training prefect-worker-dashboards prefect-worker-default` (they share one build), then confirm each appears as a subscribed worker via `docker exec -it ds_prefect prefect work-pool ls` and that a manually triggered flow run in the relevant pool actually transitions out of `Scheduled`/`Pending`.
 - For Streamlit changes, confirm `http://SERVER_IP:8501` loads without runtime errors.
 
 ## Data safety rules

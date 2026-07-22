@@ -257,6 +257,21 @@ services:
       prefect worker start --pool dashboards --type process
       "
 
+  # Comodín para lo que todavía no encaja claramente en chats/training/
+  # dashboards (pruebas puntuales, un flow nuevo mientras se decide su tipo
+  # real, etc.). Concurrency-limit bajo a propósito porque es "cajón de
+  # sastre" -- no se conoce de antemano el perfil de recursos de lo que
+  # caiga aquí. Si algo que vive en `default` se vuelve recurrente, muévelo
+  # a su pool por tipo (ver PREFECT_JUPYTER_GUIDE.md, paso 5).
+  prefect-worker-default:
+    <<: *prefect-worker-common
+    container_name: ds_prefect_worker_default
+    command: >
+      /bin/sh -c "
+      prefect work-pool create default --type process --concurrency-limit 2 || true;
+      prefect worker start --pool default --type process
+      "
+
   # ─── JUPYTERHUB ────────────────────────────────────────────────────────────
   jupyterhub:
     build: ./jupyterhub
