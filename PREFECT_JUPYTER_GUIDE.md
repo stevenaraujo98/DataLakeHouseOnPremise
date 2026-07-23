@@ -31,6 +31,16 @@ y `main.ipynb`; el flow correspondiente vive en el repo como
 porque lo mantiene el equipo, no un solo usuario — para un flow personal, el
 `.py` va directo en tu carpeta, no en el repo).
 
+⚠️ **Ese mismo directorio también existe en JupyterHub bajo una segunda
+ruta: `/flows/users/{usuario}/{proyecto}/`** (mismos archivos, otra puerta
+de entrada). Es la ruta idéntica a la que ven los `prefect-worker-*` que
+ejecutan tus flows. Desarrolla/edita donde te sea cómodo (`/home/...`), pero
+**cuando vayas a correr `prefect deploy` (paso 4), hazlo parado en
+`/flows/users/{usuario}/{proyecto}/`**, no en `/home/...` — así la ruta que
+Prefect guarda para el flow es la misma que el worker realmente tiene
+disponible, y no falla al ejecutarse por no encontrar el archivo. Lo mismo
+aplica a flows organizacionales: usa `/flows/org/...`, no `/srv/flows/org/...`.
+
 ---
 
 ## 1. Desarrollar y validar en el notebook
@@ -84,12 +94,19 @@ deployar.
 
 ## 4. Deployar (registrar el flow en Prefect Server)
 
-Revisar también el paso 5 para elegir el pool.  
+Revisar también el paso 5 para elegir el pool.
 El entrypoint va con el nombre real de la función @flow.
-Desde la misma terminal:
-```bash
-prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default --tag th
 
+Párate en la ruta `/flows/...` (ver ⚠️ del paso 0), no en `/home/...` ni
+`/srv/flows/...`:
+```bash
+cd /flows/users/{tu_usuario}/{tu_proyecto}
+prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool chats --tag th
+```
+
+Ejemplo real (flow organizacional, ruta `/flows/org`):
+```bash
+cd /flows/org
 prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
 ```
 
@@ -98,12 +115,14 @@ prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-t
   `name="..."` que le pusiste al `@flow(...)`. En `analisis_chat_th.py` la
   función se llama `analisis_chat_th_flow` — si pones otra cosa, `prefect
   deploy` falla con `MissingFlowError` y te sugiere el nombre correcto.
-- El CLI puede hacerte 1-2 preguntas interactivas la primera vez (ej. si
+- Si te pregunta `Would you like your workers to pull your flow code from a
+  remote storage location...? [y/n]`, responde **`n`**. El código ya está
+  disponible localmente para los workers (mismos bind mounts); decir "y" te
+  manda por el camino de storage remoto vía git, y la imagen no tiene el
+  binario `git` instalado (`FileNotFoundError: 'git'`).
+- El CLI puede hacerte 1-2 preguntas interactivas más la primera vez (ej. si
   quieres agregar un schedule ahora). Si no quieres que se ejecute todavía
   automáticamente, responde que no / omite el schedule — ver el paso 7.
-- `--pool default` es el work pool que ya existe (lo crea automáticamente
-  `prefect-worker` al arrancar). Si quieres usar otro pool, ver el paso 5
-  antes de deployar.
 - Si prefieres evitar los prompts interactivos: `export PREFECT_CLI_PROMPT=false`
   antes de correr `prefect deploy`.
 
@@ -287,3 +306,5 @@ En la UI: `Deployments` → tu deployment → menú `...` → **Delete**.
 | `ImportError: No module named 'common_tasks'` | `PYTHONPATH` no llegó al proceso | Verifica `PYTHONPATH` en el entorno (`echo $PYTHONPATH`); en JupyterHub reinicia tu kernel/servidor para recoger cambios de `jupyterhub_config.py` |
 | El deployment no aparece en la UI aunque el `prefect deploy` "funcionó" | Corriste `prefect deploy` desde `ds_prefect` (no desde JupyterHub) sin `PREFECT_API_URL`, y quedó en una API efímera local | Siempre deploya desde la terminal de JupyterHub, nunca con `docker exec -it ds_prefect ...` |
 | `prefect deploy ... --pool th` falla diciendo que el pool no existe | `--pool` no crea el work pool automáticamente | `prefect work-pool create th --type process` antes de deployar — ver paso 5 |
+| `FileNotFoundError: [Errno 2] No such file or directory: 'git'` al deployar | Respondiste "y" al prompt de storage remoto; la imagen no tiene `git` instalado | Responde `n` a esa pregunta — el código ya es local para los workers, no hace falta storage remoto |
+| El deployment se crea bien pero el flow run falla al ejecutarse diciendo que no encuentra el `.py` | Deployaste parado en `/home/...` o `/srv/flows/...`; esa ruta no existe dentro del worker | Deploya parado en `/flows/users/{usuario}/{proyecto}` o `/flows/org` — ver ⚠️ del paso 0 |

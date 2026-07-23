@@ -288,6 +288,15 @@ services:
       - ./notebooks:/srv/notebooks/examples
       - ./flows:/srv/flows/org
       - /data/datascience/flows:/srv/flows/shared    # Flows compartidos accesibles
+      # Mismas rutas absolutas que ven los prefect-worker-* (/flows/org,
+      # /flows/shared, /flows/users) -- mismos archivos que /srv/flows/org,
+      # /srv/flows/shared y /home de arriba, montados también aquí para que
+      # `prefect deploy` con storage local resuelva igual en JupyterHub y en
+      # el worker que después ejecuta el flow. Usa estas rutas (no /home ni
+      # /srv/flows/...) cuando vayas a deployar -- ver PREFECT_JUPYTER_GUIDE.md.
+      - ./flows:/flows/org
+      - /data/datascience/flows:/flows/shared
+      - /data/datascience/notebooks:/flows/users
     ports:
       - "8000:8000"
     environment:
