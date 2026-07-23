@@ -11,6 +11,7 @@ Contexto (ver también [AGENTS.md](AGENTS.md), sección "Prefect flows: org / sh
 - Tareas compartidas (conexión a Postgres/MinIO, etc.) viven en
   [flows/common_tasks.py](flows/common_tasks.py) y se importan con
   `from common_tasks import ...` desde cualquier flow, gracias a `PYTHONPATH`.
+  `PYTHONPATH` es lo que Python usa para buscar módulos al hacer import.
 
 ---
 
@@ -26,16 +27,21 @@ Cada usuario tiene su carpeta en JupyterHub, que es la misma que
 ```
 
 Ejemplo real ya existente: `/home/admin/analisis_chat_th/` (con `1_process.ipynb`
-y `main.ipynb`; el flow correspondiente vive en el repo como
-[flows/analisis_chat_th.py](flows/analisis_chat_th.py), un flow **organizacional**
-porque lo mantiene el equipo, no un solo usuario — para un flow personal, el
-`.py` va directo en tu carpeta, no en el repo).
+y `main.ipynb`). El flow correspondiente, `analisis_chat_th.py`, es
+**organizacional** porque lo mantiene el equipo — su versión oficial vive en
+el repo como [flows/analisis_chat_th.py](flows/analisis_chat_th.py) (mientras
+no se suba a git, la única copia real es la de esta carpeta de usuario, ver
+Troubleshooting). Reutiliza las tasks compartidas de
+[flows/common_tasks.py](flows/common_tasks.py) (no es un flow, es el módulo
+del que cualquier flow importa `connect_postgres`, `conectar_minio`, etc. —
+ver el paso 2). Para un flow personal (no compartido con el equipo), el `.py`
+va directo en tu carpeta, no en el repo.
 
-⚠️ **Ese mismo directorio también existe en JupyterHub bajo una segunda
-ruta: `/flows/users/{usuario}/{proyecto}/`** (mismos archivos, otra puerta
+**Ese mismo directorio también existe en JupyterHub bajo una segunda
+ruta: `/flows/users/{usuario}/{proyecto}/`** IMPORTANTE (mismos archivos, otra puerta
 de entrada). Es la ruta idéntica a la que ven los `prefect-worker-*` que
 ejecutan tus flows. Desarrolla/edita donde te sea cómodo (`/home/...`), pero
-**cuando vayas a correr `prefect deploy` (paso 4), hazlo parado en
+**cuando vayas a correr `prefect deploy` (paso 4), hazlo desde la ruta
 `/flows/users/{usuario}/{proyecto}/`**, no en `/home/...` — así la ruta que
 Prefect guarda para el flow es la misma que el worker realmente tiene
 disponible, y no falla al ejecutarse por no encontrar el archivo. Lo mismo
@@ -55,7 +61,7 @@ Crea `mi_flow.py` en la misma carpeta, junto al notebook:
 ```python
 from prefect import flow, task
 from common_tasks import connect_postgres, cerrar_conexion, leer_query, \
-    conectar_minio, subir_dataframe_csv
+    conectar_minio, subir_dataframe_archivo
 
 @task
 def mi_transformacion(df):
@@ -70,13 +76,22 @@ def mi_flow():
         df = mi_transformacion(df)
 
         s3 = conectar_minio()
-        subir_dataframe_csv(s3, df, bucket="processed-data", key="mi_area/resultado.csv")
+        subir_dataframe_archivo(s3, df, bucket="processed-data", key="mi_area/resultado.csv")
     finally:
         cerrar_conexion(conexion)
 
 if __name__ == "__main__":
     mi_flow()
 ```
+
+`from common_tasks import ...` funciona aunque `mi_flow.py` y `common_tasks.py`
+estén en carpetas distintas (ej. tu flow en `/flows/users/admin/...` y
+`common_tasks.py` en `/flows/org`) — no es magia de rutas relativas, es que
+`/flows/org` (y `/flows/shared`) está en `PYTHONPATH`, la variable de entorno
+que Python revisa para encontrar módulos a importar, sin importar desde qué
+directorio se ejecuta el script. Está seteada tanto en JupyterHub como en
+cada `prefect-worker-*` (ver `docker-compose.yml` y `jupyterhub_config.py`),
+así que el import resuelve igual en los dos lados.
 
 ## 3. Probar el flow en la terminal de JupyterHub (ejecución local)
 
@@ -101,28 +116,40 @@ Párate en la ruta `/flows/...` (ver ⚠️ del paso 0), no en `/home/...` ni
 `/srv/flows/...`:
 ```bash
 cd /flows/users/{tu_usuario}/{tu_proyecto}
-prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool chats --tag th
+prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default
 ```
 
-Ejemplo real (flow organizacional, ruta `/flows/org`):
+Ejemplo real: `analisis_chat_th.py` **debería** deployarse desde `/flows/org`
+(es organizacional), pero mientras no esté subida a git esa carpeta no tiene
+el archivo — hoy por hoy solo existe la copia en la carpeta personal de
+`admin`, así que se deploya desde ahí:
 ```bash
-cd /flows/org
+cd /flows/users/admin/analisis_chat_th
 prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
 ```
+El día que se suba a git y aparezca en `/flows/org/analisis_chat_th.py`, hay
+que volver a correr este mismo comando parado en `/flows/org` — mismo
+`--name`, así que actualiza el deployment existente (ver paso 9) en vez de
+duplicarlo, pero **sí cuenta como redeploy** porque cambia la ruta desde
+donde se registra, aunque la función `@flow` en sí no haya cambiado.
 
 - El `entrypoint` (`archivo.py:nombre`) tiene que ser el **nombre real de la
   función Python** decorada con `@flow`, no el nombre del archivo ni el
   `name="..."` que le pusiste al `@flow(...)`. En `analisis_chat_th.py` la
   función se llama `analisis_chat_th_flow` — si pones otra cosa, `prefect
   deploy` falla con `MissingFlowError` y te sugiere el nombre correcto.
-- Si te pregunta `Would you like your workers to pull your flow code from a
-  remote storage location...? [y/n]`, responde **`n`**. El código ya está
-  disponible localmente para los workers (mismos bind mounts); decir "y" te
-  manda por el camino de storage remoto vía git, y la imagen no tiene el
-  binario `git` instalado (`FileNotFoundError: 'git'`).
-- El CLI puede hacerte 1-2 preguntas interactivas más la primera vez (ej. si
-  quieres agregar un schedule ahora). Si no quieres que se ejecute todavía
-  automáticamente, responde que no / omite el schedule — ver el paso 7.
+- El CLI puede hacer 2-3 preguntas interactivas la primera vez para un
+  deployment sin `prefect.yaml`; para un deploy simple sin schedule
+  automático, responder que no a todas funciona:
+  - `Would you like your workers to pull your flow code from a remote
+    storage location...? [y/n]` → **`n`**. El código ya está disponible
+    localmente para los workers (mismos bind mounts); decir "y" te manda por
+    el camino de storage remoto vía git, y la imagen no tiene el binario
+    `git` instalado (`FileNotFoundError: 'git'`).
+  - Si pregunta por agregar un schedule ahora → **`n`** si no quieres que se
+    ejecute todavía automáticamente (puedes agregarlo después, ver el paso 7).
+  - Si pregunta por guardar la configuración en un `prefect.yaml` → tu
+    respuesta, no afecta lo demás de esta guía.
 - Si prefieres evitar los prompts interactivos: `export PREFECT_CLI_PROMPT=false`
   antes de correr `prefect deploy`.
 
@@ -190,21 +217,34 @@ Puedes hacer esto las veces que quieras, tenga o no un schedule configurado.
 
 ## 7. Programarlo para que corra cada cierto tiempo
 
-⚠️ **La hora del cron es independiente del `TZ` del contenedor.** Prefect
-guarda cada schedule con su propia zona horaria (por defecto UTC si no la
-especificas), sin importar que `prefect-worker`/`jupyterhub` ya tengan
-`TZ=America/Guayaquil`. Si programas `0 2 * * *` sin indicar zona, correrá a
-las 2 AM **UTC** = 9 PM en Ecuador (UTC-5), no a las 2 AM de Ecuador.
-Especifica siempre la zona al crear el schedule.
+Formato del cron: `Minuto Hora Día_del_mes Mes Día_de_la_semana`. Ejemplo
+`0 20 * * *` = minuto 0, hora 20 (8 PM en formato 24h), todos los días del
+mes/meses/días de la semana → **todos los días a las 8 PM**.
+
+⚠️ **Esa hora se interpreta en la zona que le pongas al schedule — no en el
+`TZ` del contenedor.** Prefect guarda cada schedule con su propia zona
+horaria, por defecto **UTC** si no especificas `--timezone`, sin importar
+que `prefect-worker`/`jupyterhub` ya tengan `TZ=America/Guayaquil`. Dos
+escenarios distintos:
+
+- **Con `--timezone "America/Guayaquil"` (recomendado, siempre hazlo así):**
+  el número de hora que escribes en el cron **ya es hora de Ecuador**, sin
+  convertir nada. `0 20 * * *` + `--timezone "America/Guayaquil"` = 8 PM en
+  Ecuador, directo.
+- **Sin `--timezone` (el error a evitar):** Prefect asume UTC, y ahí sí hay
+  que convertir. `0 2 * * *` sin zona corre a las 2 AM **UTC**, que son las
+  **9 PM del día anterior** en Ecuador (UTC-5): `02:00 − 5h = -03:00`, y esa
+  hora negativa "retrocede" al día anterior a las 21:00. Por eso siempre hay
+  que pasar `--timezone` — así nunca tienes que hacer esta resta a mano.
 
 **Desde la UI (recomendado, no depende de la versión exacta del CLI):**
-`Deployments` → tu deployment → **Create Schedule** → elige `Cron`
-(ej. `0 2 * * *` = 2 AM diario) o `Interval`, y selecciona **Timezone:
+`Deployments` → tu deployment → **+ Schedule** → elige `Cron`
+(ej. `0 20 * * *` = 8 PM diario) o `Interval`, y selecciona **Timezone:
 America/Guayaquil** en el mismo diálogo.
 
 **Desde la terminal:**
 ```bash
-prefect deployment schedule create 'mi-flow/mi-flow-prod' --cron "0 2 * * *" --timezone "America/Guayaquil"
+prefect deployment schedule create 'mi-flow/mi-flow-prod' --cron "0 20 * * *" --timezone "America/Guayaquil"
 ```
 Si tu versión de Prefect usa otra sintaxis, confírmala con
 `prefect deployment schedule --help`.
@@ -232,22 +272,38 @@ prefect deployment schedule resume 'mi-flow/mi-flow-prod' <schedule_id>
 ## 9. Actualicé el script — ¿cómo aplico el cambio?
 
 - **Solo cambiaste la lógica interna** (mismo archivo, misma función `@flow`,
-  mismos parámetros): no hace falta re-deployar. `prefect-worker` lee el
-  `.py` desde disco (bind mount) en cada ejecución nueva, así que el próximo
-  run — manual o programado — ya usa el código actualizado. Basta con
-  guardar el archivo.
-- **Cambiaste el nombre de la función `@flow`, el nombre del archivo, los
-  parámetros que recibe, o quieres actualizar nombre/descripción/tags del
-  deployment**: vuelve a correr el mismo comando de deploy:
+  mismos parámetros, **en la misma ruta desde donde ya deployaste** — ver
+  el aviso del paso 4 sobre `/flows/org` vs `/flows/users/...`): no hace
+  falta re-deployar. El worker lee el `.py` desde disco (bind mount) en cada
+  ejecución nueva, así que el próximo run — manual o programado — ya usa el
+  código actualizado. Basta con guardar el archivo.
+- **Cambiaste el nombre de la función `@flow`, el nombre del archivo, la
+  ruta desde donde se deploya, los parámetros que recibe, o quieres
+  actualizar nombre/descripción/tags del deployment**: vuelve a correr el
+  mismo comando de deploy. Ejemplo real:
   ```bash
-  prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default
+  prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
   ```
   Como el nombre del deployment es el mismo, esto **actualiza** el
   deployment existente (mismo ID, mismo historial de runs) en vez de crear
   uno duplicado, y normalmente conserva el/los schedule(s) que ya tenía.
   Confirma la versión/descripción en la UI después.
-- Para verificar el cambio sin esperar el próximo schedule, dispara un run
-  manual (paso 6) y revisa los logs.
+
+**Cómo comprobar que de verdad corrió el código nuevo** (útil sobre todo
+cuando el cambio fue "solo lógica interna" y no hay nada visible en la UI
+que lo confirme):
+
+1. Dispara un run manual (paso 6) en vez de esperar el próximo schedule.
+2. En la UI, abre ese run y mira los nombres de las **tasks** que ejecutó.
+   Si el cambio reemplazó una task por otra (ej. al mover
+   `analisis_chat_th.py` a usar `common_tasks.py`, la task
+   `"Descargar dataframe procesado anterior"` desapareció y quedó
+   `"Descargar CSV o XLSX o Parquet desde MinIO"`), verla en el run
+   confirma que sí se está ejecutando el archivo actualizado.
+3. Si el cambio no se nota en los nombres de las tasks, la forma más segura
+   y genérica: agrega temporalmente un `print("PRUEBA-123")` al inicio del
+   `@flow`, corre un run manual, confirma que aparece en los logs, y
+   quítalo. Simple, pero funciona siempre sin importar qué haya cambiado.
 
 ## 10. Detener una ejecución que ya está corriendo
 
@@ -308,3 +364,4 @@ En la UI: `Deployments` → tu deployment → menú `...` → **Delete**.
 | `prefect deploy ... --pool th` falla diciendo que el pool no existe | `--pool` no crea el work pool automáticamente | `prefect work-pool create th --type process` antes de deployar — ver paso 5 |
 | `FileNotFoundError: [Errno 2] No such file or directory: 'git'` al deployar | Respondiste "y" al prompt de storage remoto; la imagen no tiene `git` instalado | Responde `n` a esa pregunta — el código ya es local para los workers, no hace falta storage remoto |
 | El deployment se crea bien pero el flow run falla al ejecutarse diciendo que no encuentra el `.py` | Deployaste parado en `/home/...` o `/srv/flows/...`; esa ruta no existe dentro del worker | Deploya parado en `/flows/users/{usuario}/{proyecto}` o `/flows/org` — ver ⚠️ del paso 0 |
+| Un flow "organizacional" (ej. `analisis_chat_th.py`) no aparece en `/flows/org`, solo `common_tasks.py` | El archivo se editó localmente en el repo pero nunca se hizo `git add`/`commit`/`push` — `git pull` en el servidor no puede traer algo que nunca se subió | Revisa `git status` en el repo local; si aparece como sin trackear, pide que se suba, luego `git pull` en el servidor |
