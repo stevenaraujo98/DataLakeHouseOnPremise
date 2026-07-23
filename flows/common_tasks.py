@@ -22,6 +22,7 @@ import pandas as pd
 import polars as pl
 import psycopg2
 from prefect import task
+from prefect.cache_policies import NO_CACHE
 import openpyxl
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "pgbouncer")
@@ -34,7 +35,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 
 
-@task(name="Conectar PostgreSQL")
+@task(name="Conectar PostgreSQL", cache_policy=NO_CACHE)
 def connect_postgres(database: str):
     """Conectar a PostgreSQL. `database` es obligatorio: cada equipo/flow usa su propia base."""
     try:
@@ -51,14 +52,14 @@ def connect_postgres(database: str):
         raise RuntimeError(f"Error conectando a PostgreSQL: {e}")
 
 
-@task(name="Cerrar conexión PostgreSQL")
+@task(name="Cerrar conexión PostgreSQL", cache_policy=NO_CACHE)
 def cerrar_conexion(conexion):
     if conexion:
         conexion.close()
         print("✓ Conexión PostgreSQL cerrada")
 
 
-@task(name="Leer query PostgreSQL")
+@task(name="Leer query PostgreSQL", cache_policy=NO_CACHE)
 def leer_query(conexion, query: str) -> pd.DataFrame:
     """Ejecutar un SELECT y devolver un DataFrame."""
     try:
@@ -69,7 +70,7 @@ def leer_query(conexion, query: str) -> pd.DataFrame:
         raise RuntimeError(f"Error leyendo datos: {e}")
 
 
-@task(name="Conectar S3 (MinIO)")
+@task(name="Conectar S3 (MinIO)", cache_policy=NO_CACHE)
 def conectar_minio():
     s3 = boto3.client(
         "s3",
@@ -87,7 +88,7 @@ _LECTORES = {
 }
 
 
-@task(name="Descargar CSV o XLSX o Parquet desde MinIO")
+@task(name="Descargar CSV o XLSX o Parquet desde MinIO", cache_policy=NO_CACHE)
 def descargar_archivo_minio(s3_client, bucket: str, key: str, engine: str = "pandas"):
     """
     Descargar un CSV, XLSX o Parquet de MinIO. Si no existe, devuelve un DataFrame vacío.
@@ -125,7 +126,7 @@ def descargar_archivo_minio(s3_client, bucket: str, key: str, engine: str = "pan
         return df_vacio
 
 
-@task(name="Subir DataFrame como CSV, XLSX o Parquet a MinIO")
+@task(name="Subir DataFrame como CSV, XLSX o Parquet a MinIO", cache_policy=NO_CACHE)
 def subir_dataframe_archivo(s3_client, df, bucket: str, key: str, formato: str = "csv"):
     """
     Subir un DataFrame (pandas o polars, detectado automáticamente) como
