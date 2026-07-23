@@ -1,0 +1,24 @@
+# Copia este archivo a config.yaml dentro de la carpeta del proyecto nuevo
+# y completa los datos reales. NO subir config.yaml con contraseñas reales
+# en texto plano a git si el repo es público — aquí solo van hashes bcrypt.
+credentials:
+  usernames:
+    cliente1:
+      email: cliente1@example.com
+      name: Nombre del cliente
+      password: PEGAR_AQUI_HASH_GENERADO_CON_generate_hash.py
+      role: cliente
+    admin1:
+      email: admin@tuempresa.com
+      name: Admin del proyecto
+      password: PEGAR_AQUI_HASH_GENERADO_CON_generate_hash.py
+      role: admin
+
+cookie:
+  # Debe ser único por proyecto para que las sesiones no se mezclen
+  # entre dashboards distintos servidos desde el mismo dominio/IP.
+  name: NOMBRE_PROYECTO_auth
+  # Clave aleatoria única para firmar la cookie. Generar con, por ejemplo:
+  # python -c "import secrets; print(secrets.token_hex(16))"
+  key: CLAVE_ALEATORIA_UNICA
+  expiry_days: 7

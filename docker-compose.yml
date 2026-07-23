@@ -318,13 +318,35 @@ services:
     networks:
       - ds_network
  
-  # ─── STREAMLIT ─────────────────────────────────────────────────────────────
-  streamlit:
-    build: ./dashboards
-    container_name: ds_streamlit
+  # ─── TRAEFIK (reverse proxy de dashboards) ─────────────────────────────────
+  # Enruta cada proyecto de dashboards/<proyecto> por su propio PathPrefix
+  # (ej. http://SERVER_IP/proyecto-demo-1). Descubre servicios automáticamente
+  # via labels de Docker: agregar un proyecto nuevo no toca esta config, solo
+  # agrega un servicio nuevo con sus propios labels (ver STREAMLIT_GUIDE.md).
+  traefik:
+    image: traefik:v3.1
+    container_name: ds_traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ds_network
+
+  # ─── DASHBOARD INTERNO ──────────────────────────────────────────────────────
+  # Vista operativa del stack (no es para clientes, sin login). Sigue publicado
+  # directo en :8501 como antes, no pasa por Traefik.
+  dashboard-internal:
+    build: ./dashboards/_internal
+    container_name: ds_dashboard_internal
     restart: unless-stopped
     volumes:
-      - ./dashboards:/app
+      - ./dashboards/_internal:/app
       - /data/datascience/minio:/data/local
     ports:
       - "8501:8501"
@@ -341,7 +363,73 @@ services:
         condition: service_started   # started, no healthy
     networks:
       - ds_network
- 
+
+  # ─── DASHBOARDS DE PROYECTO (uno por cliente) ──────────────────────────────
+  # Cada uno vive en su propio contenedor, sin puerto publicado (solo Traefik
+  # lo alcanza dentro de ds_network), con su propio login y config.yaml.
+  # Patrón para agregar uno nuevo: ver STREAMLIT_GUIDE.md.
+  dashboard-proyecto-demo-1:
+    build: ./dashboards/proyecto-demo-1
+    container_name: ds_dashboard_proyecto_demo_1
+    restart: unless-stopped
+    command: >
+      streamlit run app.py
+      --server.address=0.0.0.0
+      --server.port=8501
+      --server.baseUrlPath=/proyecto-demo-1
+    volumes:
+      - ./dashboards/proyecto-demo-1:/app
+      - ./dashboards/common:/app/common:ro
+      - /data/datascience/minio:/data/local
+    environment:
+      - SERVER_IP=${SERVER_IP}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      minio:
+        condition: service_healthy
+      mlflow:
+        condition: service_started   # started, no healthy
+    networks:
+      - ds_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.proyecto-demo-1.rule=PathPrefix(`/proyecto-demo-1`)"
+      - "traefik.http.services.proyecto-demo-1.loadbalancer.server.port=8501"
+
+  dashboard-proyecto-demo-2:
+    build: ./dashboards/proyecto-demo-2
+    container_name: ds_dashboard_proyecto_demo_2
+    restart: unless-stopped
+    command: >
+      streamlit run app.py
+      --server.address=0.0.0.0
+      --server.port=8501
+      --server.baseUrlPath=/proyecto-demo-2
+    volumes:
+      - ./dashboards/proyecto-demo-2:/app
+      - ./dashboards/common:/app/common:ro
+      - /data/datascience/minio:/data/local
+    environment:
+      - SERVER_IP=${SERVER_IP}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      minio:
+        condition: service_healthy
+      mlflow:
+        condition: service_started   # started, no healthy
+    networks:
+      - ds_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.proyecto-demo-2.rule=PathPrefix(`/proyecto-demo-2`)"
+      - "traefik.http.services.proyecto-demo-2.loadbalancer.server.port=8501"
+
 networks:
   ds_network:
     driver: bridge

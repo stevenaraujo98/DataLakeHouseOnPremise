@@ -24,12 +24,14 @@ En `/data` conviven dos árboles con propósitos distintos — no mezclar códig
 Dentro de `DataLakeHouseOnPremise/` (build contexts y config, uno por servicio):
 - `docker-compose.yml`: orquesta todo el stack.
 - `flows/`: flows **organizacionales** versionados en git (ver [PREFECT_JUPYTER_GUIDE.md](PREFECT_JUPYTER_GUIDE.md)), incluye `common_tasks.py` con las tareas compartidas de Postgres/MinIO.
-- `jupyterhub/`, `mlflow/`, `prefect-worker/`, `dashboards/`: `Dockerfile` (y config) de cada servicio.
+- `jupyterhub/`, `mlflow/`, `prefect-worker/`: `Dockerfile` (y config) de cada servicio.
+- `dashboards/`: un contenedor Streamlit por proyecto, enrutados por Traefik (`dashboards/_internal/` = vista interna sin login en `:8501`; `dashboards/<proyecto>/` = un dashboard por cliente, con login propio; `dashboards/_template/` = plantilla para clonar; `dashboards/common/` = auth compartida). Ver [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md).
 - `notebooks/`: notebooks de ejemplo/plantilla versionados en git (ej. `Prefect_Jobs_Scheduler.ipynb`, `1_process.ipynb`), montados como `/srv/notebooks/examples` en JupyterHub — son solo referencia, distintos de los notebooks reales de cada usuario (esos viven en `datascience/notebooks/{usuario}/`, montados como `/home/{usuario}`).
 - `sql/`: bootstrap inicial de PostgreSQL.
 - `pgbouncer/`: config de referencia, hoy el servicio `pgbouncer` se configura solo por variables de entorno, no lee estos archivos.
 - `diagrams/`: fuente de diagramas de arquitectura, no se usa en runtime.
 - `AGENTS.md`, `ADITONAL.md`: guías operativas.
+- `PREFECT_JUPYTER_GUIDE.md`, `STREAMLIT_GUIDE.md`: runbooks de Prefect/JupyterHub y de los dashboards Streamlit multi-proyecto.
 
 > Si acabas de traer los cambios de `prefect-worker` (worker de Prefect) a este repo, en el servidor falta hacer `git pull` antes de `docker compose up -d --build` — sin eso, `docker-compose.yml` referenciará `./prefect-worker` pero esa carpeta todavía no existirá ahí.
 
@@ -253,7 +255,8 @@ docker compose restart minio
 docker compose restart mlflow
 docker compose restart prefect
 docker compose restart jupyterhub
-docker compose restart streamlit
+docker compose restart dashboard-internal
+docker compose restart dashboard-proyecto-demo-1
 ```  
 
 Si reconstruiste la imagen, cambiaste código o Dockerfile de un servicio:
@@ -263,7 +266,11 @@ sudo docker compose up -d --build minio
 sudo docker compose up -d --build mlflow
 sudo docker compose up -d --build prefect
 sudo docker compose up -d --build jupyterhub
-sudo docker compose up -d --build streamlit
+sudo docker compose up -d --build traefik dashboard-internal dashboard-proyecto-demo-1 dashboard-proyecto-demo-2
+```
+Nota: al renombrar/agregar servicios de dashboards en `docker-compose.yml`, usa `--remove-orphans` la primera vez para limpiar el contenedor viejo `ds_streamlit`:
+```bash
+sudo docker compose up -d --build --remove-orphans
 ```
 
 Ejemplo de cambio en docker-compose.yml, jupyterhub_config.py y Dockerfile para jupyterhub 
@@ -379,12 +386,13 @@ sudo docker exec -it ds_postgres psql -U postgres -c "\l"
 ```
 
 ### Servidores levantados
-- http://192.168.10.59:8501/
+- http://192.168.10.59:8501/ (dashboard interno, sin login)
+- http://192.168.10.59/proyecto-demo-1 (dashboard de cliente, con login — ver [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md))
+- http://192.168.10.59/proyecto-demo-2 (dashboard de cliente, con login)
 - http://192.168.10.59:5000/
 - http://192.168.10.59:9001/
 - http://192.168.10.59:4200/
 - http://192.168.10.59:8000/
-- 
 
 ### Funcionalidad
 Conectarse a base de datos con las credenciales env.  
@@ -451,4 +459,7 @@ with mlflow.start_run():
 ```
 
 ---
-Para Streamlit solo se muestra en el puerto 8501
+Streamlit ya no es un único dashboard en el puerto 8501: ahora es un dashboard
+interno (sigue en `:8501`, sin login) más N dashboards de cliente, cada uno en
+su propio contenedor y ruta (`/proyecto-x`), enrutados por Traefik en el
+puerto 80, con login propio. Ver [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md).

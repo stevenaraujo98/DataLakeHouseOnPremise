@@ -13,7 +13,7 @@
 - Prefect uses PostgreSQL for API/server state. The `prefect` service is only the server (API + UI); it does not execute flow code.
 - `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards` are three separate services, all built from `./prefect-worker`, that actually execute deployed flows — one per work pool, grouped by workload type (not by project/unit). Without the matching worker running, a deployment's runs stay `Scheduled`/`Late` forever. See "Prefect work pools" below.
 - JupyterHub provides notebook access for users and mounts user homes from `/data/datascience/notebooks`.
-- Streamlit serves dashboards from `dashboards/app.py` and reads data from MinIO.
+- `traefik` is a reverse proxy that routes each per-project Streamlit dashboard by `PathPrefix` (e.g. `/proyecto-demo-1`) and discovers containers via Docker labels — no config changes needed to add a new project. `dashboard-internal` (formerly the single `streamlit` service) stays published directly on `:8501`, unauthenticated, for internal/ops use. Each client project is its own container with its own login (`streamlit-authenticator`) and `config.yaml`. See [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) for the full pattern and how to add a new project.
 - `minio-setup` is a one-shot bootstrap container that creates buckets and can be safely recreated.
 
 ## MinIO buckets explained
@@ -75,9 +75,11 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - `flows/`: organizational flows tracked in git (mounted as `/flows/org` in `prefect` and each `prefect-worker-*`, `/srv/flows/org` in `jupyterhub`), including the shared [flows/common_tasks.py](flows/common_tasks.py).
 - `pgbouncer/pgbouncer.ini`, `pgbouncer/generate-config.sh`: reference PgBouncer config. Not currently mounted by the `pgbouncer` service in `docker-compose.yml` (it's configured purely via env vars) — keep this in mind before assuming a change here has any runtime effect.
 - `diagrams/`: architecture diagram sources (`mermaid.txt`, `dbdiagram.txt`), documentation only, not used by any container.
-- `dashboards/app.py`: Streamlit entrypoint.
+- `dashboards/_internal/app.py`: internal, unauthenticated Streamlit dashboard (stack status), published on `:8501`.
+- `dashboards/<proyecto>/`: one per client dashboard project (own `Dockerfile`, `config.yaml`, `app.py`), routed by Traefik, no published port. `dashboards/_template/` is the scaffold to copy for a new one; `dashboards/common/` holds the shared `auth.py`/`generate_hash.py`.
 - `ADITONAL.md`: operational notes and troubleshooting commands.
 - `PREFECT_JUPYTER_GUIDE.md`: end-user runbook for going notebook → flow → deployment → schedule from JupyterHub.
+- `STREAMLIT_GUIDE.md`: how the multi-project dashboard/Traefik/auth pattern works and how to add a new client project.
 - `MLFLOW_GUIDE.md`: end-user runbook for tracking experiments and logging/loading models from JupyterHub, Prefect flows, and from a machine outside the server.
 
 ## Persistence model
@@ -94,7 +96,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - `prefect` depends on healthy `postgres`.
 - `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards`, `prefect-worker-default` each depend on healthy `prefect` and started `mlflow`.
 - `jupyterhub` depends on healthy `postgres` and started `mlflow`.
-- `streamlit` depends on `minio` and `mlflow`.
+- `dashboard-internal` and each `dashboard-<proyecto>` depend on `minio` and `mlflow`. Each `dashboard-<proyecto>` also needs `traefik` running to be reachable (no `depends_on` between them since Traefik discovers via the Docker socket, not compose startup order).
 
 ## Dev environment tips
 - Start from the repository root when running Docker Compose commands.
@@ -124,7 +126,8 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - For MLflow changes, confirm the UI loads and artifact logging still writes to MinIO.
 - For Prefect changes, confirm `http://SERVER_IP:4200/api` responds and the server starts cleanly.
 - For `prefect-worker/Dockerfile` changes, rebuild all four with `docker compose build prefect-worker-chats prefect-worker-training prefect-worker-dashboards prefect-worker-default` (they share one build), then confirm each appears as a subscribed worker via `docker exec -it ds_prefect prefect work-pool ls` and that a manually triggered flow run in the relevant pool actually transitions out of `Scheduled`/`Pending`.
-- For Streamlit changes, confirm `http://SERVER_IP:8501` loads without runtime errors.
+- For `dashboard-internal` changes, confirm `http://SERVER_IP:8501` loads without runtime errors.
+- For per-project dashboard changes, confirm `http://SERVER_IP/<proyecto>` prompts for login and the correct role-gated content shows after signing in (see [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md)).
 
 ## Data safety rules
 - Safe: `docker compose restart service_name`

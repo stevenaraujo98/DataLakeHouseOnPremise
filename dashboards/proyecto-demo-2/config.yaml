@@ -1,0 +1,17 @@
+credentials:
+  usernames:
+    cliente2:
+      email: cliente2@example.com
+      name: Cliente Demo 2
+      password: $2b$12$ScRvys4jz5mwP/4XHD96rufAEDNFaWw5AVzDDi7wkgascii48YYwq
+      role: cliente
+    admin2:
+      email: admin@tuempresa.com
+      name: Admin Proyecto Demo 2
+      password: $2b$12$UhL47dTY5iUzFr/6baEQmeEQBrP8gLn7h7MNGoVbAxyQh97ATytNW
+      role: admin
+
+cookie:
+  name: proyecto_demo_2_auth
+  key: e7903eb84a95474234476ced53042dc5
+  expiry_days: 7
