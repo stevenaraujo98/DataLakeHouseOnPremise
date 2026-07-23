@@ -18,9 +18,17 @@ Internet/LAN
  dashboard-internal (:8501, sin Traefik, sin login) → vista operativa del stack
 ```
 
-- **`traefik`**: reverse proxy que descubre servicios por labels de Docker.
-  Agregar un proyecto nuevo nunca requiere tocar la config de Traefik —
-  solo agregar un servicio con sus propios labels en `docker-compose.yml`.
+- **`traefik`**: reverse proxy configurado con el **provider de archivos**
+  (`traefik/dynamic/*.yml`), no con el provider de Docker. Se probó el
+  provider de Docker (auto-descubrimiento por labels) y falló en el
+  servidor real: el cliente Docker que trae compilado Traefik v3.1 pide
+  fijo la API `1.24` sin negociar, y un daemon Docker reciente (API `1.40+`)
+  la rechaza (`client version 1.24 is too old...`) — `DOCKER_API_VERSION`
+  no lo soluciona porque Traefik no lee esa variable. El provider de
+  archivos evita el socket de Docker por completo y enruta por el DNS
+  interno de la red de compose (`http://dashboard-<proyecto>:8501`).
+  Con `--providers.file.watch=true`, agregar un archivo nuevo en
+  `traefik/dynamic/` no requiere reiniciar Traefik.
 - **`dashboard-internal`** (`dashboards/_internal/`): el dashboard de estado
   del stack que ya existía, sin autenticación, publicado directo en `:8501`
   como antes. Es una vista tuya, no de clientes.
@@ -74,12 +82,25 @@ ID** (SSO), el único archivo que cambia es `dashboards/common/auth.py`
    - Nombre del servicio y `container_name`
    - `build:` y los `volumes:` que apuntan a `dashboards/<nombre-proyecto>`
    - `--server.baseUrlPath=/<nombre-proyecto>` en el `command:`
-   - Los tres labels de Traefik (`routers.<nombre-proyecto>...`, `services.<nombre-proyecto>...`)
-6. Levantar el servicio:
+6. Crear `traefik/dynamic/<nombre-proyecto>.yml`:
+   ```yaml
+   http:
+     routers:
+       <nombre-proyecto>:
+         rule: "PathPrefix(`/<nombre-proyecto>`)"
+         service: <nombre-proyecto>
+     services:
+       <nombre-proyecto>:
+         loadBalancer:
+           servers:
+             - url: "http://dashboard-<nombre-proyecto>:8501"
+   ```
+   Traefik lo detecta solo (`--providers.file.watch=true`), no hace falta reiniciarlo.
+7. Levantar el servicio:
    ```bash
    docker compose up -d --build dashboard-<nombre-proyecto>
    ```
-7. URL para compartir con el cliente: `http://SERVER_IP/<nombre-proyecto>`
+8. URL para compartir con el cliente: `http://SERVER_IP/<nombre-proyecto>`
 
 ## Proyectos de ejemplo
 
@@ -108,8 +129,8 @@ líneas por proyecto, sin tocar el código de las apps:
    subdominio hacia el servidor):
    ```yaml
    command:
-     - "--providers.docker=true"
-     - "--providers.docker.exposedbydefault=false"
+     - "--providers.file.directory=/etc/traefik/dynamic"
+     - "--providers.file.watch=true"
      - "--entrypoints.web.address=:80"
      - "--entrypoints.websecure.address=:443"
      - "--certificatesresolvers.le.acme.httpchallenge=true"
@@ -120,16 +141,23 @@ líneas por proyecto, sin tocar el código de las apps:
      - "80:80"
      - "443:443"
    volumes:
-     - /var/run/docker.sock:/var/run/docker.sock:ro
+     - ./traefik/dynamic:/etc/traefik/dynamic:ro
      - /data/datascience/traefik:/letsencrypt
    ```
-2. En cada proyecto, reemplazar los labels de `PathPrefix` por `Host`:
+2. En cada `traefik/dynamic/<proyecto>.yml`, reemplazar la regla `PathPrefix` por `Host` y agregar TLS:
    ```yaml
-   labels:
-     - "traefik.enable=true"
-     - "traefik.http.routers.<proyecto>.rule=Host(`<proyecto>.midominio.com`)"
-     - "traefik.http.routers.<proyecto>.tls.certresolver=le"
-     - "traefik.http.services.<proyecto>.loadbalancer.server.port=8501"
+   http:
+     routers:
+       <proyecto>:
+         rule: "Host(`<proyecto>.midominio.com`)"
+         service: <proyecto>
+         tls:
+           certResolver: le
+     services:
+       <proyecto>:
+         loadBalancer:
+           servers:
+             - url: "http://dashboard-<proyecto>:8501"
    ```
 3. Quitar `--server.baseUrlPath=/<proyecto>` del `command:` de Streamlit
    (ya no hace falta, cada proyecto vive en la raíz de su propio subdominio).

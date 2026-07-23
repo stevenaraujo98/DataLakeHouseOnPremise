@@ -1,0 +1,10 @@
+http:
+  routers:
+    proyecto-demo-1:
+      rule: "PathPrefix(`/proyecto-demo-1`)"
+      service: proyecto-demo-1
+  services:
+    proyecto-demo-1:
+      loadBalancer:
+        servers:
+          - url: "http://dashboard-proyecto-demo-1:8501"

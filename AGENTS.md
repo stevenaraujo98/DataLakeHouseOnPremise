@@ -13,7 +13,7 @@
 - Prefect uses PostgreSQL for API/server state. The `prefect` service is only the server (API + UI); it does not execute flow code.
 - `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards` are three separate services, all built from `./prefect-worker`, that actually execute deployed flows — one per work pool, grouped by workload type (not by project/unit). Without the matching worker running, a deployment's runs stay `Scheduled`/`Late` forever. See "Prefect work pools" below.
 - JupyterHub provides notebook access for users and mounts user homes from `/data/datascience/notebooks`.
-- `traefik` is a reverse proxy that routes each per-project Streamlit dashboard by `PathPrefix` (e.g. `/proyecto-demo-1`) and discovers containers via Docker labels — no config changes needed to add a new project. `dashboard-internal` (formerly the single `streamlit` service) stays published directly on `:8501`, unauthenticated, for internal/ops use. Each client project is its own container with its own login (`streamlit-authenticator`) and `config.yaml`. See [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) for the full pattern and how to add a new project.
+- `traefik` is a reverse proxy that routes each per-project Streamlit dashboard by `PathPrefix` (e.g. `/proyecto-demo-1`). It uses the **file provider** (`traefik/dynamic/*.yml`), not the Docker provider — the Docker provider was tried first and failed on the real host: Traefik v3.1's bundled Docker client hardcodes API version `1.24` with no negotiation, and a recent Docker daemon (API `1.40+`) rejects that (`client version 1.24 is too old...`); `DOCKER_API_VERSION` does not fix it because Traefik doesn't read that env var. The file provider avoids the Docker socket entirely and routes via compose's internal DNS (`http://dashboard-<proyecto>:8501`); with `--providers.file.watch=true`, adding a project only means adding a YAML file, no Traefik restart needed. `dashboard-internal` (formerly the single `streamlit` service) stays published directly on `:8501`, unauthenticated, for internal/ops use. Each client project is its own container with its own login (`streamlit-authenticator`) and `config.yaml`. See [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) for the full pattern and how to add a new project.
 - `minio-setup` is a one-shot bootstrap container that creates buckets and can be safely recreated.
 
 ## MinIO buckets explained
@@ -77,6 +77,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - `diagrams/`: architecture diagram sources (`mermaid.txt`, `dbdiagram.txt`), documentation only, not used by any container.
 - `dashboards/_internal/app.py`: internal, unauthenticated Streamlit dashboard (stack status), published on `:8501`.
 - `dashboards/<proyecto>/`: one per client dashboard project (own `Dockerfile`, `config.yaml`, `app.py`), routed by Traefik, no published port. `dashboards/_template/` is the scaffold to copy for a new one; `dashboards/common/` holds the shared `auth.py`/`generate_hash.py`.
+- `traefik/dynamic/`: one YAML file per dashboard project, defines its Traefik router+service (file provider, watched live — see `dashboards`/`traefik` note above).
 - `ADITONAL.md`: operational notes and troubleshooting commands.
 - `PREFECT_JUPYTER_GUIDE.md`: end-user runbook for going notebook → flow → deployment → schedule from JupyterHub.
 - `STREAMLIT_GUIDE.md`: how the multi-project dashboard/Traefik/auth pattern works and how to add a new client project.
@@ -96,7 +97,7 @@ Full step-by-step (notebook → flow → deploy → schedule → run-now → pau
 - `prefect` depends on healthy `postgres`.
 - `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards`, `prefect-worker-default` each depend on healthy `prefect` and started `mlflow`.
 - `jupyterhub` depends on healthy `postgres` and started `mlflow`.
-- `dashboard-internal` and each `dashboard-<proyecto>` depend on `minio` and `mlflow`. Each `dashboard-<proyecto>` also needs `traefik` running to be reachable (no `depends_on` between them since Traefik discovers via the Docker socket, not compose startup order).
+- `dashboard-internal` and each `dashboard-<proyecto>` depend on `minio` and `mlflow`. Each `dashboard-<proyecto>` also needs `traefik` running to be reachable (no `depends_on` between them — Traefik reads static files from `traefik/dynamic/` and resolves the target container by DNS at request time, not at compose startup).
 
 ## Dev environment tips
 - Start from the repository root when running Docker Compose commands.

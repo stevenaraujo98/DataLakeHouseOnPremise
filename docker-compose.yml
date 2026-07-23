@@ -320,23 +320,28 @@ services:
  
   # ─── TRAEFIK (reverse proxy de dashboards) ─────────────────────────────────
   # Enruta cada proyecto de dashboards/<proyecto> por su propio PathPrefix
-  # (ej. http://SERVER_IP/proyecto-demo-1). Descubre servicios automáticamente
-  # via labels de Docker: agregar un proyecto nuevo no toca esta config, solo
-  # agrega un servicio nuevo con sus propios labels (ver STREAMLIT_GUIDE.md).
+  # (ej. http://SERVER_IP/proyecto-demo-1). Usa el provider de archivos
+  # (traefik/dynamic/*.yml), NO el provider de Docker: el provider de Docker
+  # requiere hablar con /var/run/docker.sock, y el cliente Docker que trae
+  # compilado Traefik v3.1 pide fijo API 1.24 sin negociar — con un daemon
+  # que exige mínimo 1.40+ (Docker reciente) eso falla siempre
+  # ("client version 1.24 is too old...") y DOCKER_API_VERSION no lo arregla
+  # porque Traefik no lee esa env var. El provider de archivos evita el
+  # socket por completo y enruta por DNS interno de la red de compose.
+  # Agregar un proyecto nuevo = agregar un archivo en traefik/dynamic/, sin
+  # reiniciar Traefik (--providers.file.watch=true) — ver STREAMLIT_GUIDE.md.
   traefik:
     image: traefik:v3.1
     container_name: ds_traefik
     restart: unless-stopped
     command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
-    environment:
-      - DOCKER_API_VERSION=1.54
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
     networks:
       - ds_network
 
@@ -396,10 +401,6 @@ services:
         condition: service_started   # started, no healthy
     networks:
       - ds_network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.proyecto-demo-1.rule=PathPrefix(`/proyecto-demo-1`)"
-      - "traefik.http.services.proyecto-demo-1.loadbalancer.server.port=8501"
 
   dashboard-proyecto-demo-2:
     build: ./dashboards/proyecto-demo-2
@@ -427,10 +428,6 @@ services:
         condition: service_started   # started, no healthy
     networks:
       - ds_network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.proyecto-demo-2.rule=PathPrefix(`/proyecto-demo-2`)"
-      - "traefik.http.services.proyecto-demo-2.loadbalancer.server.port=8501"
 
 networks:
   ds_network:
