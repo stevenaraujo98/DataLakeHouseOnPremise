@@ -386,13 +386,14 @@ sudo docker exec -it ds_postgres psql -U postgres -c "\l"
 ```
 
 ### Servidores levantados
-- http://192.168.10.59:8501/ (dashboard interno, sin login)
-- http://192.168.10.59/proyecto-demo-1 (dashboard de cliente, con login — ver [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md))
-- http://192.168.10.59/proyecto-demo-2 (dashboard de cliente, con login)
-- http://192.168.10.59:5000/
-- http://192.168.10.59:9001/
-- http://192.168.10.59:4200/
-- http://192.168.10.59:8000/
+- Dashboard interno (estado del stack) = http://192.168.10.59:8501/ (dashboard interno, sin login)
+- Proyecto demo 1 = http://192.168.10.59/proyecto-demo-1 (dashboard de cliente, con login — ver [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md))
+- Proyecto demo 2 = http://192.168.10.59/proyecto-demo-2 (dashboard de cliente, con login)
+- MLflow = http://192.168.10.59:5000
+- MinIO API (S3) = http://192.168.10.59:9000
+- MinIO Console = http://192.168.10.59:9001
+- Prefect UI/API = http://192.168.10.59:4200
+- JupyterHub = http://192.168.10.59:8000
 
 ### Funcionalidad
 Conectarse a base de datos con las credenciales env.  
