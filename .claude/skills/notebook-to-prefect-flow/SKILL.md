@@ -14,11 +14,21 @@ anything — they are the actual source of truth, and this skill intentionally
 doesn't restate their content in full so it can't drift out of sync with them.
 
 - [flows/common_tasks.py](../../flows/common_tasks.py) — reusable `@task`s
-  for Postgres/MinIO: `connect_postgres`, `cerrar_conexion`, `leer_query`,
-  `conectar_minio`, `descargar_archivo_minio` (CSV/XLSX/Parquet, pandas or
-  polars via `engine=`), `subir_dataframe_archivo` (same formats, detects
-  pandas vs. polars automatically from the `df` you pass). All six are
-  decorated `cache_policy=NO_CACHE` — see why below.
+  for Postgres/DB2/MinIO: `connect_postgres`, `cerrar_conexion`, `leer_query`
+  (SELECT, pandas or polars via `engine=` — polars reads straight off the
+  cursor, it does not go through pandas first), `ejecutar_escritura` (INSERT/
+  UPDATE/DELETE — one task for all three, since only the SQL text differs;
+  pass `params` for a single statement or `many=True` + a list of tuples for
+  `executemany`), `connect_db2`/`cerrar_conexion_db2`/`leer_query_db2` (IBM
+  DB2 — needs the `ibm_db` package added to both Dockerfiles and an image
+  rebuild before first use; the import is lazy specifically so the rest of
+  this module keeps working for everyone else until that rebuild happens),
+  `conectar_minio`, `descargar_archivo_minio` (CSV/XLSX/Parquet/JSON, pandas
+  or polars via `engine=`), `subir_dataframe_archivo` (same formats, detects
+  pandas vs. polars automatically from the `df` you pass). JSON has two
+  shapes and the file extension in `key` is what decides which one you get
+  back, not `formato=`/`engine=` alone — see "JSON: DataFrame vs. dict"
+  below. All are decorated `cache_policy=NO_CACHE` — see why below.
 - [flows/analisis_chat_th.py](../../flows/analisis_chat_th.py) — the fullest
   real example of house style, and the one that's actually been deployed and
   run successfully: `@task(name="...")` with Spanish names, `cache_policy=
@@ -52,6 +62,36 @@ logic, each one a separate thing to fix if MinIO credentials or the Postgres
 host ever change. `common_tasks.py` exists precisely so that doesn't happen.
 Treat it as the first place to look, not an optional nicety.
 
+## JSON: DataFrame vs. dict
+
+`descargar_archivo_minio`/`subir_dataframe_archivo` handle two different
+JSON shapes through the same pair of functions, not a separate format name —
+matching what the notebook actually produced matters, or the round trip
+breaks:
+
+- **A DataFrame** (tabular data, e.g. a table with a `tools` list column that
+  a CSV would otherwise stringify and force you to `ast.literal_eval` back —
+  this is exactly why JSON support was added): upload with
+  `subir_dataframe_archivo(s3, df, bucket=..., key="algo.json", formato="json")`
+  (saved as a records list), download with
+  `descargar_archivo_minio(s3, bucket=..., key="algo.json", engine="pandas")`
+  (or `"polars"`).
+- **A dict** (e.g. a metrics/KPI dict for a dashboard, not row-shaped data):
+  upload the same way but pass a `dict` instead of a DataFrame as `df` —
+  `subir_dataframe_archivo(s3, metricas_dict, bucket=..., key="metrics.json", formato="json")`
+  (saved as a plain JSON object, not a one-row records list). Download with
+  `engine="dict"` — `descargar_archivo_minio(s3, bucket=..., key="metrics.json", engine="dict")`
+  — which returns the dict as-is instead of trying to force it into a
+  DataFrame.
+
+Passing a dict with any `formato` other than `"json"`, or requesting
+`engine="dict"` for a key that doesn't end in `.json`, raises a clear
+`ValueError` immediately rather than silently producing a malformed
+DataFrame or file — don't work around that error, it means the wrong
+function/engine combination was picked for the data's actual shape. The `key`
+extension has to be `.json` either way; it's what
+`descargar_archivo_minio` uses to pick the reader, independent of `engine=`.
+
 ## Why every task needs `cache_policy=NO_CACHE`
 
 Prefect 3 tries to cache each task's result by hashing its input arguments,
@@ -81,12 +121,14 @@ forget on a first pass and only shows up as confusing log noise later.
    connects to Postgres, runs a query, connects to MinIO, or uploads/
    downloads a file, check whether an existing task in `common_tasks.py`
    already does it — `descargar_archivo_minio`/`subir_dataframe_archivo`
-   cover CSV, XLSX, and Parquet already, and pandas or polars (pass
+   cover CSV, XLSX, Parquet, and JSON already, and pandas or polars (pass
    `engine="polars"` to the download, or just pass a polars DataFrame to the
-   upload — it's auto-detected). Import and call these — don't re-derive
-   connection strings or re-instantiate `boto3.client(...)` inline. If the
-   notebook needs a format these don't cover, write a local `@task` for it
-   (with `cache_policy=NO_CACHE`, same as everything else).
+   upload — it's auto-detected). For a SELECT, use `leer_query(conexion,
+   query, engine=...)`; for an INSERT/UPDATE/DELETE, use `ejecutar_escritura`.
+   Import and call these — don't re-derive connection strings or
+   re-instantiate `boto3.client(...)` inline. If the notebook needs a format
+   these don't cover, write a local `@task` for it (with `cache_policy=
+   NO_CACHE`, same as everything else).
 
 3. **Flag genuinely new reusable patterns, don't silently duplicate them.**
    If the notebook does something that isn't in `common_tasks.py` yet but
@@ -122,16 +164,15 @@ forget on a first pass and only shows up as confusing log noise later.
    failure, silently re-paying for anything already done once (e.g.
    re-classifying messages with OpenAI a second time).
 
-6. **Save it next to the notebook, not in the repo's `flows/` folder.** The
-   target path is the same directory as the source notebook (a per-user
-   folder under `/home/{usuario}/{proyecto}/` on the server, i.e.
-   `/data/datascience/notebooks/{usuario}/{proyecto}/` — see AGENTS.md's
-   "Prefect flows" section). That's a per-user flow, distinct from the
-   organizational flows tracked in this git repo's `flows/`. Only write into
-   `flows/` if the user explicitly says this is meant to become a shared,
-   team-maintained flow like `analisis_chat_th.py`. If the flow's name isn't
-   obvious from the notebook's filename/content, ask the user what to call
-   the file and the `@flow` function rather than guessing.
+6. **Save it inside this repo's local `flows/` folder**, next to
+   `common_tasks.py` and `analisis_chat_th.py` — not next to the source
+   notebook. Every flow produced by this skill is treated as an
+   organizational, git-tracked flow, deployed from `/flows/org` on the
+   server (see AGENTS.md's "Prefect flows" section and
+   PREFECT_JUPYTER_GUIDE.md step 0/4 for the `/flows/org` vs `/srv/flows/org`
+   distinction). If the flow's name isn't obvious from the notebook's
+   filename/content, ask the user what to call the file and the `@flow`
+   function rather than guessing.
 
 7. **If the notebook reads an env var like an API key, check whether a
    project-scoped one already exists** (e.g. `OPENAI_API_KEY_TH` for
@@ -152,17 +193,19 @@ forget on a first pass and only shows up as confusing log noise later.
    commands, matching what actually works in this project (not the generic
    Prefect tutorial flow):
    - Test locally: `python mi_flow.py` in a JupyterHub terminal, from
-     wherever the file actually is (`/home/{usuario}/{proyecto}`, or the
-     `/flows/users/...` mirror — either works for local testing since it
-     doesn't touch a worker).
-   - Deploy: first `cd` into the **`/flows/...` mirror path**, not
-     `/home/...` or `/srv/flows/...` — `cd /flows/users/{usuario}/{proyecto}`
-     for a personal flow, `cd /flows/org` for an organizational one. This
+     `/flows/org` (or `/srv/flows/org`, same files) once the file has been
+     pulled there via `git pull` — it doesn't touch a worker, so either
+     mirror works.
+   - Deploy: `cd /flows/org` (not `/srv/flows/org`) before running
+     `prefect deploy` — see PREFECT_JUPYTER_GUIDE.md step 0/4 for why. This
      matters even though it's the same files: `prefect deploy` with local
      storage records the directory you ran it from, and that path has to
      exist inside the `prefect-worker-*` container that later executes the
      flow, or the run fails at execution time even though the deployment
-     looked like it created fine. Then:
+     looked like it created fine. Remember the flow file only reaches the
+     server's `/flows/org` once it's committed and pushed to git and pulled
+     on the server (see PREFECT_JUPYTER_GUIDE.md's troubleshooting table).
+     Then:
      `prefect deploy mi_flow.py:mi_flow --name "..." --pool <pool>` — the
      part after the colon **must be the real Python function name** of the
      `@flow`, not the file name and not the flow's `name="..."` display

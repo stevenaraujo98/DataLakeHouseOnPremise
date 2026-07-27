@@ -10,6 +10,16 @@ credentials:
       name: Admin Proyecto Demo 1
       password: $2b$12$7P0WV7kJkTSrk4wxNu6SA./x3Y5gXwlqAitBWnAKDJcOGdpWEz.fi
       role: admin
+    saraujo:
+      email: saraujo@espol.edu.ec
+      name: Steven Araujo
+      password: $2b$12$awu5vpReANbp1d1Cvk6ZCON5k9qLETXX3x9MCPvg0rRJ6geYcB1VG
+      role: admin
+    yronquil:
+      email: yronquil@espol.edu.ec
+      name: Ysai Ronquillo
+      password: $2b$12$/l99yV2pLdF/VVF/OTAqVOuyIIvCGtKe13PKV/4m5QQ6yu1gxJ7.O
+      role: admin
 
 cookie:
   name: proyecto_demo_1_auth

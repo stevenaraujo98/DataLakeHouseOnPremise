@@ -241,6 +241,15 @@ sudo docker volume ls
 sudo docker network ls
 ```
 
+#### ENV
+Env llega a jupyterhub con _PASSTHROUGH_PREFIXES y a prefect-worker-* vía env_file.  
+
+Para actualizar es necesario usar los comandos:  
+```bash
+docker compose build jupyterhub prefect-worker-chats prefect-worker-training prefect-worker-dashboards prefect-worker-default
+docker compose up -d jupyterhub prefect-worker-chats prefect-worker-training prefect-worker-dashboards prefect-worker-default
+```
+
 #### Reiniciar servicios
 Nota: Los datos en /data/datascience/postgres, /data/datascience/minio, etc. nunca se tocan con --rmi all. Ese flag solo afecta las imágenes Docker, no los volúmenes montados del host.
 

@@ -57,6 +57,7 @@ c.Spawner.cmd = ['jupyterhub-singleuser', '--allow-root']
 _PASSTHROUGH_PREFIXES = (
     'POSTGRES_', 'MINIO_', 'AWS_', 'MLFLOW_',
     'PREFECT_', 'OPENAI_', 'OPEN_API_', 'SERVER_IP',
+    'DB2_',
 )
 c.Spawner.environment = {
     key: value

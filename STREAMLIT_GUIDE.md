@@ -3,6 +3,10 @@
 Cómo está organizado `dashboards/`, cómo agregar un proyecto nuevo para un
 cliente, y cómo migrar el enrutamiento cuando haya un dominio propio.
 
+Documentation: 
+- [Chart](https://docs.streamlit.io/develop/api-reference/charts)
+- [Streamlit component](https://streamlit.io/components?category=all)
+
 ## Arquitectura
 
 ```
@@ -121,6 +125,9 @@ cuando ya no lo necesites como referencia.
 Talento Humano (ver `dashboards/chatbot-th/app.py`). Sigue teniendo
 credenciales heredadas de la demo (`config.yaml` trae un `TODO` al
 respecto) — reemplázalas antes de compartir la URL con usuarios reales.
+
+- `http://SERVER_IP/chatbot-th` — usuarios `cliente2` / `Demo5678!` y
+  `admin2` / `Admin5678!`
 
 ## Login con Microsoft Entra ID (opcional, por proyecto)
 

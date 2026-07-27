@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir \
     pandas \
     "boto3>=1.42.90,<1.43.0" \
     psycopg2-binary \
+    ibm_db \
     python-dotenv \
     openai \
     openpyxl \

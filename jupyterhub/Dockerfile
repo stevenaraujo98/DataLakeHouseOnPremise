@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir \
     ipykernel \
     jupyterhub-nativeauthenticator \
     psycopg2-binary \
+    ibm_db \
     polars-lts-cpu \
     duckdb \
     "mlflow>=2.10,<3" \

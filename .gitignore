@@ -1,5 +1,7 @@
 .env
-__pycache__
+__pycache__/*
+notebooks/*
+flows/*
 
 # Secretos de Microsoft Entra ID por proyecto (client_secret, cookie_secret) -
 # nunca en git. Cada proyecto tiene su copia local, ver *.example.
