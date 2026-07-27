@@ -106,6 +106,9 @@ Microsoft Entra ID" más abajo para el paso a paso.
 7. Levantar el servicio:
    ```bash
    docker compose up -d --build dashboard-<nombre-proyecto>
+
+   <!-- Ejemplo real -->
+   sudo docker compose up -d --build --remove-orphans dashboard-proyecto-demo-1 dashboard-chatbot-th
    ```
 8. URL para compartir con el cliente: `http://SERVER_IP/<nombre-proyecto>`
 
