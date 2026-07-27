@@ -13,7 +13,7 @@ credentials:
     saraujo:
       email: saraujo@espol.edu.ec
       name: Steven Araujo
-      password: $2b$12$j/KYxdw2LPOvH/UziAzS3uLzXfAET8s3sW9eqF/ubXjrpScEVJwcG
+      password: $2b$12$xvpQHd1utb2RHBJ8p7l2tuxyvJ6hD95NPNUPsZo.nBGFGM4ZN0SzK
       role: admin
     yronquil:
       email: yronquil@espol.edu.ec

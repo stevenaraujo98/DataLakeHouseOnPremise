@@ -125,7 +125,11 @@ el archivo — hoy por hoy solo existe la copia en la carpeta personal de
 `admin`, así que se deploya desde ahí:
 ```bash
 cd /flows/users/admin/analisis_chat_th
+# Responder al CLI n y n
 prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
+
+# Responder al CLI n y n
+prefect deploy metricas_dashboard_chat_th.py:metricas_dashboard_chat_th_flow --name "metricas-dashboard-chat-th" --pool chats --tag th
 ```
 El día que se suba a git y aparezca en `/flows/org/analisis_chat_th.py`, hay
 que volver a correr este mismo comando parado en `/flows/org` — mismo
