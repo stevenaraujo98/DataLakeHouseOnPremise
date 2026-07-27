@@ -13,7 +13,7 @@
 - Prefect uses PostgreSQL for API/server state. The `prefect` service is only the server (API + UI); it does not execute flow code.
 - `prefect-worker-chats`, `prefect-worker-training`, `prefect-worker-dashboards` are three separate services, all built from `./prefect-worker`, that actually execute deployed flows — one per work pool, grouped by workload type (not by project/unit). Without the matching worker running, a deployment's runs stay `Scheduled`/`Late` forever. See "Prefect work pools" below.
 - JupyterHub provides notebook access for users and mounts user homes from `/data/datascience/notebooks`.
-- `traefik` is a reverse proxy that routes each per-project Streamlit dashboard by `PathPrefix` (e.g. `/proyecto-demo-1`). It uses the **file provider** (`traefik/dynamic/*.yml`), not the Docker provider — the Docker provider was tried first and failed on the real host: Traefik v3.1's bundled Docker client hardcodes API version `1.24` with no negotiation, and a recent Docker daemon (API `1.40+`) rejects that (`client version 1.24 is too old...`); `DOCKER_API_VERSION` does not fix it because Traefik doesn't read that env var. The file provider avoids the Docker socket entirely and routes via compose's internal DNS (`http://dashboard-<proyecto>:8501`); with `--providers.file.watch=true`, adding a project only means adding a YAML file, no Traefik restart needed. `dashboard-internal` (formerly the single `streamlit` service) stays published directly on `:8501`, unauthenticated, for internal/ops use. Each client project is its own container with its own login (`streamlit-authenticator`) and `config.yaml`. See [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) for the full pattern and how to add a new project.
+- `traefik` is a reverse proxy that routes each per-project Streamlit dashboard by `PathPrefix` (e.g. `/proyecto-demo-1`). It uses the **file provider** (`traefik/dynamic/*.yml`), not the Docker provider — the Docker provider was tried first and failed on the real host: Traefik v3.1's bundled Docker client hardcodes API version `1.24` with no negotiation, and a recent Docker daemon (API `1.40+`) rejects that (`client version 1.24 is too old...`); `DOCKER_API_VERSION` does not fix it because Traefik doesn't read that env var. The file provider avoids the Docker socket entirely and routes via compose's internal DNS (`http://dashboard-<proyecto>:8501`); with `--providers.file.watch=true`, adding a project only means adding a YAML file, no Traefik restart needed. `dashboard-internal` (formerly the single `streamlit` service) stays published directly on `:8501`, unauthenticated, for internal/ops use. Each client project is its own container with its own login (`streamlit-authenticator`) and `config.yaml`, plus an *optional* per-project Microsoft Entra ID (SSO) login gated on `dashboards/<proyecto>/.streamlit/secrets.toml` existing (git-ignored, not committed) — if that file is absent the Microsoft button doesn't render and only username/password works, so projects without it are unaffected. See [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) for the full pattern, the Azure Portal setup steps, and how to add a new project.
 - `minio-setup` is a one-shot bootstrap container that creates buckets and can be safely recreated.
 
 ## MinIO buckets explained
@@ -26,6 +26,14 @@ MinIO provides S3-compatible object storage with four automatically created buck
   - `gold/`: aggregated data ready for consumption
   - `features/`: engineered features for ML models (e.g., `customer_features/v2026_03_13/`)
   - Intermediate storage between raw ingestion and final consumption; consumed for analysis, dashboards, and model training.
+  - Step by step: raw/ ➔ silver/ (limpieza/unión) ➔ gold/ (agregaciones/BI/pensado para métricas legibles por humanos) Ó features/ (variables/ML/almacena variables vectorizadas, numéricas y estructuradas por entidad listas para que las consuma un algoritmo).
+  - features/  
+├── customer_features/  
+│   ├── v2026_03_13/           # Snapshot de variables a esa fecha  
+│   │   ├── features.parquet   # DataFrame desnormalizado  
+│   │   └── metadata.json      # Tipos de datos, schema, autor  
+├── product_embeddings/  
+│   └── catalog_v2/  
 
 - **`models`** — Stores serialized machine learning models (pickle, joblib, ONNX, etc.). Provides manual versioning and management of trained models independent of MLflow's artifact system.
 

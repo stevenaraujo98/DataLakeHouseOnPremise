@@ -402,17 +402,17 @@ services:
     networks:
       - ds_network
 
-  dashboard-proyecto-demo-2:
-    build: ./dashboards/proyecto-demo-2
-    container_name: ds_dashboard_proyecto_demo_2
+  dashboard-chatbot-th:
+    build: ./dashboards/chatbot-th
+    container_name: ds_dashboard_chatbot_th
     restart: unless-stopped
     command: >
       streamlit run app.py
       --server.address=0.0.0.0
       --server.port=8501
-      --server.baseUrlPath=/proyecto-demo-2
+      --server.baseUrlPath=/chatbot-th
     volumes:
-      - ./dashboards/proyecto-demo-2:/app
+      - ./dashboards/chatbot-th:/app
       - ./dashboards/common:/app/common:ro
       - /data/datascience/minio:/data/local
     environment:

@@ -266,7 +266,7 @@ sudo docker compose up -d --build minio
 sudo docker compose up -d --build mlflow
 sudo docker compose up -d --build prefect
 sudo docker compose up -d --build jupyterhub
-sudo docker compose up -d --build traefik dashboard-internal dashboard-proyecto-demo-1 dashboard-proyecto-demo-2
+sudo docker compose up -d --build traefik dashboard-internal dashboard-proyecto-demo-1 dashboard-chatbot-th
 ```
 Nota: al renombrar/agregar servicios de dashboards en `docker-compose.yml`, usa `--remove-orphans` la primera vez para limpiar el contenedor viejo `ds_streamlit`:
 ```bash
@@ -388,7 +388,7 @@ sudo docker exec -it ds_postgres psql -U postgres -c "\l"
 ### Servidores levantados
 - Dashboard interno (estado del stack) = http://192.168.10.59:8501/ (dashboard interno, sin login)
 - Proyecto demo 1 = http://192.168.10.59/proyecto-demo-1 (dashboard de cliente, con login — ver [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md))
-- Proyecto demo 2 = http://192.168.10.59/proyecto-demo-2 (dashboard de cliente, con login)
+- Chatbot TH = http://192.168.10.59/chatbot-th (dashboard de analítica del chatbot, con login)
 - MLflow = http://192.168.10.59:5000
 - MinIO API (S3) = http://192.168.10.59:9000
 - MinIO Console = http://192.168.10.59:9001

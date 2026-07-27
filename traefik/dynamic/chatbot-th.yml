@@ -1,0 +1,10 @@
+http:
+  routers:
+    chatbot-th:
+      rule: "PathPrefix(`/chatbot-th`)"
+      service: chatbot-th
+  services:
+    chatbot-th:
+      loadBalancer:
+        servers:
+          - url: "http://dashboard-chatbot-th:8501"

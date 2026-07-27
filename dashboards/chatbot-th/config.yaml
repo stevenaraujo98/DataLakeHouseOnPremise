@@ -1,3 +1,7 @@
+# TODO: estas siguen siendo las credenciales de demo heredadas de
+# proyecto-demo-2. Antes de compartir esta URL con usuarios reales de TH,
+# reemplaza estos usuarios (y sus hashes, con dashboards/common/generate_hash.py)
+# por las personas que deben ver el dashboard de analítica del chatbot.
 credentials:
   usernames:
     cliente2:
@@ -12,6 +16,6 @@ credentials:
       role: admin
 
 cookie:
-  name: proyecto_demo_2_auth
+  name: chatbot_th_auth
   key: e7903eb84a95474234476ced53042dc5
   expiry_days: 7

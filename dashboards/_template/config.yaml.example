@@ -22,3 +22,18 @@ cookie:
   # python -c "import secrets; print(secrets.token_hex(16))"
   key: CLAVE_ALEATORIA_UNICA
   expiry_days: 7
+
+# Opcional: solo se activa si además existe .streamlit/secrets.toml con la
+# config de Microsoft Entra ID (ver STREAMLIT_GUIDE.md). Lista blanca de
+# correos autorizados a entrar con "Iniciar sesión con Microsoft" y su rol
+# -- igual de restringido que el login usuario/contraseña, un correo del
+# tenant que no esté aquí NO puede entrar aunque el login con Microsoft
+# funcione. Borra esta sección si no vas a usar Entra ID en este proyecto.
+entra:
+  usernames:
+    cliente@empresa-del-cliente.com:
+      role: cliente
+    saraujo@espol.edu.ec:
+      role: admin
+    yronquil@espol.edu.ec:
+      role: admin

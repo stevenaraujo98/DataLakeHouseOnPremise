@@ -11,8 +11,8 @@ Internet/LAN
      ▼
  ┌─────────┐   PathPrefix /proyecto-demo-1  ┌──────────────────────────┐
  │ traefik │ ───────────────────────────────▶ dashboard-proyecto-demo-1 │ (login propio)
- │  :80    │   PathPrefix /proyecto-demo-2  ┌──────────────────────────┐
- │         │ ───────────────────────────────▶ dashboard-proyecto-demo-2 │ (login propio)
+ │  :80    │   PathPrefix /chatbot-th       ┌──────────────────────────┐
+ │         │ ───────────────────────────────▶ dashboard-chatbot-th      │ (login propio)
  └─────────┘
 
  dashboard-internal (:8501, sin Traefik, sin login) → vista operativa del stack
@@ -54,10 +54,13 @@ puedes usar los roles que necesites). `dashboards/common/auth.py` expone
 3. Devuelve `(username, role)` para que el `app.py` del proyecto gatee
    secciones según el rol.
 
-Esto es username/contraseña por ahora. Cuando se migre a **Microsoft Entra
-ID** (SSO), el único archivo que cambia es `dashboards/common/auth.py`
-(cambia la implementación interna de `login_gate`, la firma
-`(username, role)` se mantiene) — los `app.py` de cada proyecto no se tocan.
+El login usuario/contraseña siempre está disponible. **Microsoft Entra ID
+(SSO) es opcional y por proyecto**: se activa solo si existe
+`dashboards/<proyecto>/.streamlit/secrets.toml` — mientras ese archivo no
+exista en un proyecto, el botón "Iniciar sesión con Microsoft" ni siquiera
+aparece, así que activar esto en un proyecto no afecta a los demás ni al
+login usuario/contraseña que ya funciona. Ver la sección "Login con
+Microsoft Entra ID" más abajo para el paso a paso.
 
 ## Cómo agregar un proyecto de dashboard nuevo
 
@@ -104,18 +107,73 @@ ID** (SSO), el único archivo que cambia es `dashboards/common/auth.py`
 
 ## Proyectos de ejemplo
 
-`dashboards/proyecto-demo-1` y `dashboards/proyecto-demo-2` son dos
-proyectos funcionales de ejemplo, aislados entre sí (rutas, `config.yaml`,
-usuarios y cookies distintos), pensados para verificar el patrón end-to-end
-antes de crear proyectos reales:
+`dashboards/proyecto-demo-1` es un proyecto funcional de ejemplo, pensado
+para verificar el patrón end-to-end antes de crear proyectos reales:
 
 - `http://SERVER_IP/proyecto-demo-1` — usuarios `cliente1` / `Demo1234!` y
   `admin1` / `Admin1234!`
-- `http://SERVER_IP/proyecto-demo-2` — usuarios `cliente2` / `Demo5678!` y
-  `admin2` / `Admin5678!`
 
-Un usuario de un proyecto no puede iniciar sesión en el otro. Bórralos
-cuando ya no los necesites como referencia.
+Un usuario de un proyecto no puede iniciar sesión en el otro. Bórralo
+cuando ya no lo necesites como referencia.
+
+`proyecto-demo-2` dejó de existir como demo: se renombró a
+`dashboards/chatbot-th`, el dashboard real de analítica del chatbot de
+Talento Humano (ver `dashboards/chatbot-th/app.py`). Sigue teniendo
+credenciales heredadas de la demo (`config.yaml` trae un `TODO` al
+respecto) — reemplázalas antes de compartir la URL con usuarios reales.
+
+## Login con Microsoft Entra ID (opcional, por proyecto)
+
+Basado en la [guía oficial de Streamlit para Microsoft](https://docs.streamlit.io/develop/tutorials/authentication/microsoft).
+Es **opcional y no afecta nada mientras no lo configures**: sin
+`.streamlit/secrets.toml`, un proyecto sigue funcionando solo con
+usuario/contraseña, exactamente igual que ahora.
+
+### 1. Lo que tienes que hacer TÚ en Azure Portal (una sola vez, cuenta de administrador)
+
+Esto requiere la cuenta de administrador de tu organización en Microsoft
+Entra ID — es un registro de aplicación único, compartido por todos los
+proyectos de dashboards (cada proyecto solo necesita su propio Redirect URI
+dentro de esa misma app).
+
+1. Entra a [portal.azure.com](https://portal.azure.com) → **Microsoft Entra ID** → **App registrations** → **New registration**.
+2. Nombre: algo identificable, ej. `DataLakeHouse Dashboards`.
+3. **Supported account types**: normalmente *"Accounts in this organizational directory only"* (single-tenant), salvo que quieras permitir cuentas de otras organizaciones.
+4. **Redirect URI**: puedes dejarlo vacío por ahora, se agrega en el paso 6. Clic en **Register**.
+5. En la página **Overview** de la app recién creada, copia:
+   - **Application (client) ID**
+   - **Directory (tenant) ID**
+6. Ve a **Authentication** → **Add a platform** → **Web**. Ahí agregas **un Redirect URI por cada proyecto** que vaya a tener login con Microsoft:
+   - `http://SERVER_IP/proyecto-demo-1/oauth2callback`
+   - `http://SERVER_IP/chatbot-th/oauth2callback`
+   - (y así por cada proyecto nuevo que actives; cuando exista dominio, agrega también la versión `https://<proyecto>.midominio.com/oauth2callback` — ver más abajo)
+7. Ve a **Certificates & secrets** → **New client secret** → copia el **Value** apenas se genera (no se vuelve a mostrar). Ese es tu `client_secret`.
+8. En **API permissions**, confirma que estén `openid`, `email`, `profile` (suelen venir por defecto vía Microsoft Graph). Si tu organización lo exige, usa **Grant admin consent**.
+
+Con esto ya tienes los 4 datos que piden los proyectos: `client_id`, `tenant_id` (dentro de la URL `server_metadata_url`), `client_secret`, y los `redirect_uri` (uno por proyecto).
+
+### 2. Lo que se hace por cada proyecto que quiera login con Microsoft
+
+1. Copiar la plantilla de secretos:
+   ```bash
+   cp dashboards/<proyecto>/.streamlit/secrets.toml.example dashboards/<proyecto>/.streamlit/secrets.toml
+   ```
+   (si el proyecto no tiene carpeta `.streamlit/`, créala: `mkdir -p dashboards/<proyecto>/.streamlit`)
+2. Completar `dashboards/<proyecto>/.streamlit/secrets.toml` con los datos de Azure Portal (paso 1) y un `cookie_secret` propio (`python -c "import secrets; print(secrets.token_hex(32))"`). **Este archivo no se sube a git** (ya está en `.gitignore`) — solo vive en el servidor.
+3. Agregar la sección `entra:` en `dashboards/<proyecto>/config.yaml` con los correos que sí deben poder entrar con Microsoft y su rol (ver `config.yaml.example`). Un correo del tenant que no esté listado ahí **no puede entrar**, aunque el login con Microsoft funcione — es la misma lógica de acceso restringido que ya tiene el login usuario/contraseña.
+4. Reconstruir el contenedor (el `requirements.txt` de la plantilla ya incluye `Authlib`, necesario para `st.login()`):
+   ```bash
+   docker compose up -d --build dashboard-<proyecto>
+   ```
+5. Probar en `http://SERVER_IP/<proyecto>` — debe seguir apareciendo el login usuario/contraseña de siempre, más un botón "Iniciar sesión con Microsoft" debajo.
+
+### Mientras tanto (antes de configurar Azure)
+
+No hace falta hacer nada para que el stack siga funcionando: sin
+`secrets.toml`, `dashboards/common/auth.py` detecta que no hay config de
+Entra y ni siquiera intenta llamar a `st.login()` — los proyectos existentes
+(`proyecto-demo-1`, `chatbot-th`) y cualquier proyecto nuevo siguen
+funcionando solo con usuario/contraseña hasta que decidas activarlo.
 
 ## Migrar a un dominio propio (subdominios + HTTPS)
 
@@ -163,3 +221,9 @@ líneas por proyecto, sin tocar el código de las apps:
    (ya no hace falta, cada proyecto vive en la raíz de su propio subdominio).
 4. Compartir con el cliente `https://<proyecto>.midominio.com` en vez de
    `http://SERVER_IP/<proyecto>`.
+5. Si el proyecto ya tenía login con Microsoft activo: en Azure Portal
+   (**Authentication**) agrega el nuevo Redirect URI
+   `https://<proyecto>.midominio.com/oauth2callback`, y actualiza
+   `redirect_uri` en `dashboards/<proyecto>/.streamlit/secrets.toml` al
+   mismo valor (puedes dejar también el viejo en Azure mientras migras,
+   y quitarlo después).
