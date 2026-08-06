@@ -53,7 +53,7 @@ POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 # (ej. `os.getenv("DB2_USER_TH") or DB2_USER`, mismo patrón que OPENAI_API_KEY_TH
 # en analisis_chat_th.py) y se la pasa explícita a `connect_db2(user=..., password=...)`.
 DB2_HOST = os.getenv("DB2_HOST")
-DB2_PORT = os.getenv("DB2_PORT_SAAC")
+DB2_PORT = os.getenv("DB2_PORT", "50000")
 DB2_USER = os.getenv("DB2_USER")
 DB2_PASSWORD = os.getenv("DB2_PASSWORD")
 DB2_DATABASE = os.getenv("DB2_DATABASE_SAAC")
