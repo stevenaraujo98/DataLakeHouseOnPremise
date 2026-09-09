@@ -222,7 +222,9 @@ Puedes hacer esto las veces que quieras, tenga o no un schedule configurado.
 
 Formato del cron: `Minuto Hora Día_del_mes Mes Día_de_la_semana`. Ejemplo
 `0 20 * * *` = minuto 0, hora 20 (8 PM en formato 24h), todos los días del
-mes/meses/días de la semana → **todos los días a las 8 PM**.
+mes/meses/días de la semana → **todos los días a las 8 PM**.  
+Todos los domingos a las 23:59 → 59 23 * * 7 - "America/Guayaquil".  
+Todos los lunes a la 01:30 → 30 01 * * 1 - "America/Guayaquil".
 
 ⚠️ **Esa hora se interpreta en la zona que le pongas al schedule — no en el
 `TZ` del contenedor.** Prefect guarda cada schedule con su propia zona
