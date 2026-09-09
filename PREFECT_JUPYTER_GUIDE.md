@@ -26,7 +26,7 @@ Cada usuario tiene su carpeta en JupyterHub, que es la misma que
 └── mi_flow.py            ← flow que crearás en el paso 2
 ```
 
-Ejemplo real ya existente: `/home/admin/analisis_chat_th/` (con `1_process.ipynb`
+Ejemplo real ya existente: `/home/admin/th/analisis_chat_th/` (con `1_process.ipynb`
 y `main.ipynb`). El flow correspondiente, `analisis_chat_th.py`, es
 **organizacional** porque lo mantiene el equipo — su versión oficial vive en
 el repo como [flows/analisis_chat_th.py](flows/analisis_chat_th.py) (mientras
@@ -112,8 +112,7 @@ deployar.
 Revisar también el paso 5 para elegir el pool.
 El entrypoint va con el nombre real de la función @flow.
 
-Párate en la ruta `/flows/...` (ver ⚠️ del paso 0), no en `/home/...` ni
-`/srv/flows/...`:
+Párate en la ruta `/flows/...` (ver ⚠️ del paso 0), no en `/home/...` ni `/srv/flows/...`:
 ```bash
 cd /flows/users/{tu_usuario}/{tu_proyecto}
 prefect deploy mi_flow.py:mi_flow --name "mi-flow-prod" --pool default
@@ -124,7 +123,7 @@ Ejemplo real: `analisis_chat_th.py` **debería** deployarse desde `/flows/org`
 el archivo — hoy por hoy solo existe la copia en la carpeta personal de
 `admin`, así que se deploya desde ahí:
 ```bash
-cd /flows/users/admin/analisis_chat_th
+cd /flows/users/admin/th/analisis_chat_th
 # Responder al CLI n y n
 prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
 
@@ -308,6 +307,20 @@ que lo confirme):
    y genérica: agrega temporalmente un `print("PRUEBA-123")` al inicio del
    `@flow`, corre un run manual, confirma que aparece en los logs, y
    quítalo. Simple, pero funciona siempre sin importar qué haya cambiado.
+
+### 9.1. Cambie el ubicacion del script a una nueva carpeta — ¿cómo aplico el cambio?
+Vuelve a ejecutar el comando tal cual se inicio a correr la primera vez para que prefect sobre escriba la ruta ya que es el mismo nombre y tags.
+
+En este ejemplo real el mismo comando seria:
+```bash
+cd /flows/users/admin/th/analisis_chat_th
+# Responder al CLI n y n
+prefect deploy analisis_chat_th.py:analisis_chat_th_flow --name "analisis-chat-th" --pool chats --tag th
+
+# Responder al CLI n y n
+prefect deploy metricas_dashboard_chat_th.py:metricas_dashboard_chat_th_flow --name "metricas-dashboard-chat-th" --pool chats --tag th
+```
+
 
 ## 10. Detener una ejecución que ya está corriendo
 
