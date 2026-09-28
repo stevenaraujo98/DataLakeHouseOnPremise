@@ -258,6 +258,9 @@ nc -zv 192.168.10.59 8501
 telnet 192.168.10.59 8501
 nc -zv 192.168.10.59 9000
 telnet 192.168.10.59 9000
+# Verificar en el servidor de produccion
+nc -zv 192.168.10.59 5432
+nc -zv 192.168.254.26 50000
 ```
 
 ## Cuándo necesitarías un proxy
