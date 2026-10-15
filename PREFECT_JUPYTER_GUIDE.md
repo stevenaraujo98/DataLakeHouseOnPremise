@@ -93,6 +93,13 @@ directorio se ejecuta el script. Está seteada tanto en JupyterHub como en
 cada `prefect-worker-*` (ver `docker-compose.yml` y `jupyterhub_config.py`),
 así que el import resuelve igual en los dos lados.
 
+### Se puede convertir usando la IA con su skill
+El skill contiene informacion de como y donde crear el script a partir del notebook.  
+El prompt puede se:
+```bash
+crea el script para prefect del notebook 1_raw_data.ipynb con el nombre analisis_chat_th.py
+```
+
 ## 3. Probar el flow en la terminal de JupyterHub (ejecución local)
 
 Abre una terminal en JupyterHub (`File > New > Terminal`) y corre:
