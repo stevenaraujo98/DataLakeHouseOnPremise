@@ -171,6 +171,9 @@ usa otros nombres, ajustar las variables y las rutas a su configuración.
    sudo docker compose restart "$SERVICIO"
    sudo docker compose ps "$SERVICIO"
    sudo docker compose logs --tail=80 "$SERVICIO"
+
+   <!-- Ejemplo -->
+   sudo docker compose logs --tail=80 dashboard-chatbot-th
    ```
 
    Si el servicio todavía no existe, crearlo con

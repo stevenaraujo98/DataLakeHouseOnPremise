@@ -224,10 +224,16 @@ sudo docker compose logs -f jupyterhub
 sudo docker compose logs -f postgres
 sudo docker compose logs -f prefect
 sudo docker compose logs -f mlflow
+sudo docker compose logs -f minio
+sudo docker compose logs -f traefik
+sudo docker compose logs -f dashboard-chatbot-th
+sudo docker compose logs --tail=80 dashboard-chatbot-th
 
 sudo docker logs -f ds_jupyterhub
 sudo docker logs -f ds_postgres
 sudo docker logs -f ds_prefect
+sudo docker logs -f ds_traefik
+sudo docker logs -f ds_dashboard_chatbot_th
 
 # Ver contenedores en ejecución
 sudo docker ps

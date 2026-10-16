@@ -124,7 +124,7 @@ def barra(datos, etiqueta, valor, titulo, top_n=20, ordenar=True, hover=()):
         ticktext=[shorten(x, width=65, placeholder="…") for x in etiquetas], title=None,
     )
     fig.update_layout(height=max(320, 30 * datos.height), margin=dict(t=15, b=35), xaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True, key=f"barra_{titulo}")
+    st.plotly_chart(fig, width="stretch", key=f"barra_{titulo}")
 
 
 def linea_diaria(datos, columnas, titulo, etiquetas=None):
@@ -147,7 +147,7 @@ def linea_diaria(datos, columnas, titulo, etiquetas=None):
         labels=etiquetas or {"variable": "Serie", "value": unidad},
     )
     fig.update_layout(legend_title_text=None, xaxis_title="Fecha", margin=dict(t=15))
-    st.plotly_chart(fig, use_container_width=True, key=f"linea_{titulo}")
+    st.plotly_chart(fig, width="stretch", key=f"linea_{titulo}")
 
 
 def vista_resumen(metricas, actividad, top_n):
@@ -181,8 +181,8 @@ def vista_resumen(metricas, actividad, top_n):
             ])
         barra(usuarios, "usuario_cedula", "interacciones", "Usuarios más activos · histórico", top_n)
     with st.expander("Ver actividad diaria y ranking de usuarios"):
-        st.dataframe(actividad, use_container_width=True, hide_index=True)
-        st.dataframe(usuarios.head(top_n), use_container_width=True, hide_index=True)
+        st.dataframe(actividad, width="stretch", hide_index=True)
+        st.dataframe(usuarios.head(top_n), width="stretch", hide_index=True)
 
 
 def vista_conversaciones(metricas, top_n):
@@ -203,7 +203,7 @@ def vista_conversaciones(metricas, top_n):
         aperturas = tabla(inicios.get(clave, []))
         barra(aperturas, etiqueta, valor, "Cómo empiezan las sesiones", top_n)
         with st.expander("Ver frecuencias de apertura"):
-            st.dataframe(aperturas.head(top_n), use_container_width=True, hide_index=True)
+            st.dataframe(aperturas.head(top_n), width="stretch", hide_index=True)
     with derecha:
         modo = st.selectbox("Lenguaje de los usuarios", ["Palabras", "Frases cortas"], key="modo_temas")
         temas = tabla(metricas.get("palabras_clave" if modo == "Palabras" else "frases_clave", []))
@@ -215,7 +215,7 @@ def vista_conversaciones(metricas, top_n):
         with st.expander("Ver frecuencias de palabras y frases"):
             if not temas.is_empty():
                 temas = temas.sort(criterio, descending=True)
-            st.dataframe(temas.head(top_n), use_container_width=True, hide_index=True)
+            st.dataframe(temas.head(top_n), width="stretch", hide_index=True)
     st.caption("Frecuencia cuenta apariciones; mensajes, usuarios y sesiones se cuentan una vez por término. El análisis temático excluye saludos, confirmaciones y palabras vacías; unifica mayúsculas y tildes.")
 
 
@@ -235,7 +235,7 @@ def vista_herramientas(metricas, top_n):
         tiempos = herramientas.with_columns((pl.col("latencia_p95_ms") / 1000).alias("p95_s"))
         barra(tiempos, "tool", "p95_s", "P95 de respuesta asociado a cada herramienta (s)", top_n)
         st.caption("Estos tiempos corresponden a la respuesta completa, no al tiempo de ejecución individual de la herramienta.")
-        st.dataframe(herramientas, use_container_width=True, hide_index=True)
+        st.dataframe(herramientas, width="stretch", hide_index=True)
     st.caption("Error del modelo, Limitante y Lenguaje inapropiado se consultan en Incidencias.")
 
 
@@ -276,8 +276,8 @@ def vista_rendimiento(metricas, actividad, top_n):
     st.caption("Tiempo acumulado del modelo: suma de latencias válidas. Duración de reloj: del primer mensaje a la última respuesta o mensaje; incluye pausas del usuario y puede abarcar varios días.")
     with st.expander("Ver sesiones y respuestas más lentas"):
         campos = ["usuario_cedula", "session_id", "interacciones", "respuestas", "tiempo_modelo_total_s", "latencia_max_ms", "duracion_min"]
-        st.dataframe(sesiones.select([c for c in campos if c in sesiones.columns]).head(top_n), use_container_width=True, hide_index=True)
-        st.dataframe(tabla(metricas.get("respuestas_mas_lentas", [])).head(top_n), use_container_width=True, hide_index=True)
+        st.dataframe(sesiones.select([c for c in campos if c in sesiones.columns]).head(top_n), width="stretch", hide_index=True)
+        st.dataframe(tabla(metricas.get("respuestas_mas_lentas", [])).head(top_n), width="stretch", hide_index=True)
 
 
 def vista_incidencias(metricas, periodo):
@@ -298,7 +298,7 @@ def vista_incidencias(metricas, periodo):
         datos = diarias.select(["fecha", *columnas]).rename({c: INCIDENCIAS[c] for c in columnas})
         fig = px.bar(datos.to_dict(as_series=False), x="fecha", y=[INCIDENCIAS[c] for c in columnas], barmode="group")
         fig.update_layout(legend_title_text=None, yaxis_title="Interacciones", xaxis_title="Fecha")
-        st.plotly_chart(fig, use_container_width=True, key="incidencias_diarias")
+        st.plotly_chart(fig, width="stretch", key="incidencias_diarias")
     else:
         st.info("No hay incidencias diarias en el rango seleccionado.")
     linea_diaria(diarias, ["tasa_incidencias_pct"], "Porcentaje diario de interacciones con incidencia")
@@ -307,7 +307,7 @@ def vista_incidencias(metricas, periodo):
             {"control": k.replace("_", " ").capitalize(), "cantidad": v}
             for k, v in metricas.get("calidad_datos", {}).items()
         ])
-        st.dataframe(calidad, use_container_width=True, hide_index=True)
+        st.dataframe(calidad, width="stretch", hide_index=True)
 
 
 def vista_detalle(metricas):
@@ -354,7 +354,7 @@ def vista_detalle(metricas):
     visible = mensajes.select([c for c in campos if c in mensajes.columns])
     st.caption(f"{numero(mensajes.height)} coincidencias · mostrando {numero(min(limite, mensajes.height))} filas. La búsqueda abarca todo el histórico.")
     st.dataframe(
-        visible.head(limite), use_container_width=True, hide_index=True,
+        visible.head(limite), width="stretch", hide_index=True,
         column_config={
             "content": st.column_config.TextColumn("Mensaje del usuario", width="large"),
             "respuesta_ia": st.column_config.TextColumn("Respuesta", width="large"),
