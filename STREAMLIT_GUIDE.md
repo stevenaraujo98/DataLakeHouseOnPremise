@@ -112,6 +112,160 @@ Microsoft Entra ID" más abajo para el paso a paso.
    ```
 8. URL para compartir con el cliente: `http://SERVER_IP/<nombre-proyecto>`
 
+## Cómo actualizar un dashboard existente
+
+Actualizar **los datos**, **el código de la interfaz** y **la imagen del
+contenedor** son acciones distintas. Si los datos cambian pero la interfaz
+sigue igual, comprobar qué versión de `app.py` está ejecutando el servidor.
+
+Los comandos siguientes se ejecutan en el **servidor Linux/WSL**, desde la
+raíz del repositorio utilizado por Docker Compose. Primero definir el
+proyecto que se quiere actualizar, sustituyendo `nombre-proyecto` por su
+nombre real:
+
+```bash
+PROYECTO="nombre-proyecto"
+SERVICIO="dashboard-${PROYECTO}"
+```
+
+El patrón de esta guía usa `dashboards/<proyecto>/`, el servicio
+`dashboard-<proyecto>` y la URL `http://SERVER_IP/<proyecto>`. Si un proyecto
+usa otros nombres, ajustar las variables y las rutas a su configuración.
+
+### Elegir la acción según lo que cambió
+
+| Cambio | Acción en el servidor |
+|---|---|
+| Solo datos de MinIO, una base de datos o una API | Ejecutar el procesamiento y publicar los resultados. Renovar la caché según lo implementado en el dashboard. |
+| `app.py` u otros archivos Python del proyecto | Actualizar los archivos en el servidor y reiniciar solo el dashboard afectado. La carpeta del proyecto se monta en `/app`. |
+| Código compartido en `dashboards/common/` | Actualizarlo y reiniciar los dashboards que utilicen ese código. |
+| `requirements.txt` o `Dockerfile` | Reconstruir la imagen y recrear el servicio. Un reinicio no instala dependencias. |
+| Variables del contenedor en `.env`, `command:` u otra configuración de Compose | Validar y recrear el servicio para aplicar la configuración nueva. |
+| Ruta en `traefik/dynamic/<proyecto>.yml` | Actualizar el archivo en el servidor. El provider de archivos lo detecta con `watch=true`. |
+
+### Actualizar el código y comprobar el archivo montado
+
+1. Llevar los archivos nuevos a `dashboards/<proyecto>/` en el repositorio
+   del servidor, mediante Git o copia de archivos. Modificar la copia de tu
+   computadora no modifica automáticamente la del servidor.
+2. Si el servicio está ejecutándose, comparar el archivo del servidor con el
+   que ve el contenedor:
+
+   ```bash
+   sha256sum "dashboards/${PROYECTO}/app.py"
+   sudo docker compose exec -T "$SERVICIO" sha256sum /app/app.py
+   ```
+
+   Ambos hashes deben coincidir. Comparar también con la versión que se
+   pretende desplegar: dos archivos antiguos pueden tener el mismo hash.
+   Si difieren, revisar qué carpeta está montada realmente:
+
+   ```bash
+   ID_CONTENEDOR_DASHBOARD=$(sudo docker compose ps -q "$SERVICIO")
+   sudo docker inspect "$ID_CONTENEDOR_DASHBOARD" --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+   ```
+
+3. Si solo cambió código Python, reiniciar el servicio:
+
+   ```bash
+   sudo docker compose restart "$SERVICIO"
+   sudo docker compose ps "$SERVICIO"
+   sudo docker compose logs --tail=80 "$SERVICIO"
+   ```
+
+   Si el servicio todavía no existe, crearlo con
+   `sudo docker compose up -d "$SERVICIO"` antes de comprobar sus archivos.
+   En el patrón de este repositorio, el código se lee del bind mount
+   `./dashboards/<proyecto>:/app`. Reconstruir la imagen no sustituye la
+   actualización de esa carpeta. Además, `up -d --build` puede conservar el
+   contenedor existente si su imagen y configuración no cambiaron; un
+   reinicio asegura que se vuelva a ejecutar el código montado.
+
+4. Abrir `http://SERVER_IP/<proyecto>`, recargar con `Ctrl+F5` e iniciar
+   sesión. Comprobar las vistas modificadas y los permisos de cada rol.
+   El puerto `:8501` corresponde al dashboard interno del stack; los
+   proyectos de clientes se acceden por su ruta a través de Traefik.
+
+### Actualizar dependencias o configuración del contenedor
+
+Si cambió `requirements.txt` o el `Dockerfile`, actualizar los archivos del
+servidor y ejecutar:
+
+```bash
+sudo docker compose build "$SERVICIO"
+sudo docker compose up -d --no-deps "$SERVICIO"
+```
+
+Si cambiaron las variables de entorno o la configuración del servicio:
+
+```bash
+sudo docker compose config --quiet
+sudo docker compose up -d --no-deps --force-recreate "$SERVICIO"
+```
+
+La recreación explícita también asegura que se apliquen los cambios de un
+`env_file`. Después, revisar el estado y los logs del servicio. Estas
+operaciones se limitan al dashboard afectado; no requieren reiniciar todo
+el stack.
+
+### Actualizar y publicar los datos
+
+Ejecutar el notebook, flow o proceso de actualización que corresponda al
+proyecto y confirmar que publicó los resultados en la fuente que consulta
+`app.py`. Preparar tablas o archivos en memoria no equivale a publicarlos.
+Si se trabaja desde JupyterHub, ejecutar también las celdas de escritura o
+subida y comprobar que finalizaron correctamente.
+
+Verificar que los archivos o tablas relacionados correspondan a la misma
+actualización y que su formato sea compatible con la app. Por ejemplo,
+actualizar el detalle no garantiza que los agregados también estén
+actualizados. Cada proyecto define sus rutas, nombres de archivos y esquema.
+
+Renovar la caché con el control que ofrezca el dashboard, si existe, o esperar
+el tiempo de expiración configurado. Actualizar los datos no requiere
+reconstruir la imagen. Si un proceso programado escribe sobre los mismos
+resultados, mantenerlo compatible con el esquema que consume la interfaz.
+
+Los notebooks están excluidos de Git por `notebooks/*`; se sincronizan por
+separado cuando forman parte del procedimiento del proyecto.
+
+### Diagnóstico si no se ven los cambios o no carga la página
+
+| Síntoma | Qué comprobar |
+|---|---|
+| Los datos son nuevos, pero la interfaz es la anterior | Versión de `app.py` en el servidor y dentro del contenedor, bind mount y URL; después reiniciar y recargar el navegador. |
+| La interfaz es nueva, pero muestra datos anteriores | Fuente consultada, fecha de publicación, caché y procesos programados que puedan sobrescribir los resultados. |
+| La app informa de un formato incompatible | Compatibilidad entre los datos publicados y las columnas o campos que espera el código. |
+| Se ve el login, pero no las gráficas | Inicio de sesión, permisos del rol, mensajes de la app y logs del servicio. |
+| Hay errores al leer la fuente de datos | Conexión, permisos y existencia de los archivos o tablas esperados. |
+| Página totalmente en blanco o cargando indefinidamente | Logs, recursos estáticos, conexión WebSocket y coincidencia entre la ruta de Traefik y `server.baseUrlPath`. |
+| HTTP 404 o 502 | Ruta de Traefik, estado del dashboard y conexión entre contenedores. |
+
+Para separar un problema del proceso Streamlit de uno del proxy, con el
+patrón de rutas y puerto interno de esta guía:
+
+```bash
+sudo docker compose ps "$SERVICIO" traefik
+sudo docker compose logs --tail=100 "$SERVICIO" traefik
+sudo docker compose exec -T "$SERVICIO" python -c 'import sys; from urllib.request import urlopen; r = urlopen(f"http://127.0.0.1:8501/{sys.argv[1]}/_stcore/health", timeout=10); print(r.status, r.read().decode())' "$PROYECTO"
+curl --max-time 10 -i "http://localhost/${PROYECTO}/_stcore/health"
+```
+
+Las dos consultas deberían responder `200` y `ok`. Si solo funciona la
+consulta interna, revisar Traefik y su ruta. Un health check correcto no
+confirma que el código de la app ni la lectura de datos funcionen: revisar
+los logs al abrir la página.
+
+Si continúa en blanco, abrir las herramientas de desarrollador del navegador
+(`F12`), revisar **Console** y **Network → WS**, y comprobar la conexión a
+`/<proyecto>/_stcore/stream`. Cuando Streamlit utiliza ese `baseUrlPath`,
+Traefik debe conservar el prefijo. Para despliegues con subdominio y
+`baseUrlPath` vacío, omitir el prefijo en las consultas de salud y WebSocket.
+
+Referencias oficiales: [configuración de Streamlit](https://docs.streamlit.io/develop/api-reference/configuration/config.toml),
+[problemas de carga remota](https://docs.streamlit.io/knowledge-base/deploy/remote-start)
+y [comprobación de salud en Docker](https://docs.streamlit.io/deploy/tutorials/docker).
+
 ## Proyectos de ejemplo
 
 `dashboards/proyecto-demo-1` es un proyecto funcional de ejemplo, pensado
