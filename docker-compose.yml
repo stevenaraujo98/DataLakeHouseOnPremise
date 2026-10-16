@@ -149,6 +149,7 @@ services:
     restart: unless-stopped
     environment:
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - TZ=America/Guayaquil
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/mlflow
@@ -358,6 +359,7 @@ services:
     ports:
       - "8501:8501"
     environment:
+      - TZ=America/Guayaquil
       - SERVER_IP=${SERVER_IP}
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
@@ -389,6 +391,7 @@ services:
       - ./dashboards/common:/app/common:ro
       - /data/datascience/minio:/data/local
     environment:
+      - TZ=America/Guayaquil
       - SERVER_IP=${SERVER_IP}
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
@@ -416,6 +419,7 @@ services:
       - ./dashboards/common:/app/common:ro
       - /data/datascience/minio:/data/local
     environment:
+      - TZ=America/Guayaquil
       - SERVER_IP=${SERVER_IP}
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}

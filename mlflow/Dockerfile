@@ -1,4 +1,9 @@
 FROM python:3.11-slim
+ENV TZ=America/Guayaquil
+# TZ requiere la base de zonas horarias del sistema.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
     "mlflow>=2.10,<3" \

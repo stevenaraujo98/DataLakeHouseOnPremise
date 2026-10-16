@@ -266,6 +266,54 @@ nc -zv 192.168.254.26 50000
 ## Cuándo necesitarías un proxy
 Usa Nginx o Traefik si quieres exponer todo por 80/443, centralizar HTTPS o publicar una sola URL sin puertos explícitos.
 
+## Horas del stack y fecha de actualización del chatbot
+
+Los dashboards y MLflow usan `TZ=America/Guayaquil` y sus imágenes instalan
+`tzdata`. JupyterHub también pasa `TZ` explícitamente al proceso de cada usuario.
+Los workers ya tienen ambas configuraciones. Esto controla la hora local del
+proceso; no modifica el reloj del host, los datos históricos ni las zonas de
+visualización que cada UI gestione por separado.
+
+El texto `Actualizado` de chatbot-th muestra `generado_en` de
+`processed-data/gold/th/chatbot/metrics.json`, no la hora de abrir la página.
+`notebooks/2_analysis.ipynb` genera ese campo con
+`datetime.now(timezone.utc).isoformat()` y el dashboard lo convierte a
+`zona_horaria` (America/Guayaquil). Por ejemplo, `20:43+00:00` se muestra como
+`15:43 -05`. Si aparece una hora futura, comprobar primero el valor del JSON y
+el reloj del host que ejecutó el notebook/flow. Cambiar `TZ` no corrige un reloj
+adelantado ni un timestamp ya escrito incorrectamente. La caché de métricas
+puede conservar el resultado anterior hasta 300 segundos.
+
+Comprobar en el servidor Linux:
+
+```bash
+date --iso-8601=seconds
+date -u --iso-8601=seconds
+timedatectl status
+docker compose exec dashboard-chatbot-th date --iso-8601=seconds
+docker compose exec jupyterhub python -c 'from datetime import datetime, timezone; print(datetime.now().astimezone().isoformat()); print(datetime.now(timezone.utc).isoformat())'
+docker compose exec prefect-worker-chats python -c 'from datetime import datetime, timezone; print(datetime.now().astimezone().isoformat()); print(datetime.now(timezone.utc).isoformat())'
+```
+
+Si el reloj está adelantado, corregir la sincronización horaria del host y
+volver a ejecutar el notebook/flow para regenerar las métricas. Si el JSON no
+incluye offset (`Z` o `+00:00`), corregir el productor para guardar fechas con
+zona explícita; no asumir automáticamente qué zona tenía ese valor.
+
+Aplicar los cambios de imágenes y entorno desde la raíz del repositorio:
+
+```bash
+docker compose config --quiet
+docker compose up -d --build --no-deps dashboard-internal dashboard-proyecto-demo-1 dashboard-chatbot-th mlflow
+docker compose up -d --no-deps jupyterhub
+```
+
+Reiniciar los servidores personales de notebooks desde JupyterHub para que
+reciban el entorno nuevo (guardar antes el trabajo). `docker compose restart`
+por sí solo no aplica cambios de `environment` ni reconstruye imágenes.
+Las programaciones de Prefect requieren su propia zona horaria explícita;
+`TZ` del contenedor no cambia la zona de una programación existente.
+
 ## Agregar Bucket a MinIo
 ```bash
 sudo docker compose run --rm --entrypoint sh minio-setup -c "

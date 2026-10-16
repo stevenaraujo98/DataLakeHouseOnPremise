@@ -2,7 +2,7 @@ import io
 import json
 import math
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from textwrap import shorten
 from zoneinfo import ZoneInfo
 
@@ -410,9 +410,12 @@ def main():
     if vista in {"Resumen", "Rendimiento", "Incidencias"} and not actividad.is_empty():
         fechas = [date.fromisoformat(x) for x in actividad["fecha"].drop_nulls().to_list()]
         if fechas:
-            minimo, maximo = min(fechas), max(fechas)
+            hoy = datetime.now(ZoneInfo("America/Guayaquil")).date()
+            ultimo_domingo = hoy - timedelta(days=(hoy.weekday() + 1) % 7)
+            inicio = ultimo_domingo - timedelta(days=29)
+            minimo, maximo = min(min(fechas), inicio), max(max(fechas), ultimo_domingo)
             seleccion = st.sidebar.date_input(
-                "Fechas para gráficas diarias", value=(minimo, maximo),
+                "Fechas para gráficas diarias", value=(inicio, ultimo_domingo),
                 min_value=minimo, max_value=maximo, key="periodo_diario",
             )
             if len(seleccion) == 2:

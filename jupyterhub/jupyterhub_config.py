@@ -65,6 +65,7 @@ c.Spawner.environment = {
     if key.startswith(_PASSTHROUGH_PREFIXES)
 }
 c.Spawner.environment.update({
+    'TZ': 'America/Guayaquil',
     # Nombres que esperan flows/common_tasks.py y los flows (distintos de
     # los nombres crudos del .env) -- igual que en el `environment:` de
     # prefect-worker en docker-compose.yml.
