@@ -23,6 +23,16 @@ credentials:
       email: yronquil@espol.edu.ec
       name: Ysai Ronquillo
       password: $2b$12$/l99yV2pLdF/VVF/OTAqVOuyIIvCGtKe13PKV/4m5QQ6yu1gxJ7.O
+      role: cliente
+    mmendoza:
+      email: mmendoza@espol.edu.ec
+      name: Marcos Mendoza
+      password: $2b$12$8UTBM0j5AIx.Eaoq.rtIBejogXBiq49uMGfxEQJbsOK.NJSlNGUZi
+      role: admin
+    jpparrag:
+      email: jpparrag@espol.edu.ec
+      name: Jeniffer Parrraga
+      password: $2b$12$2MNfNr77ppDpo4SGgBMwLOOuTXv4xzqmjOuQTnu3GaKlzHop.p33S
       role: admin
 
 cookie:
