@@ -143,7 +143,7 @@ usa otros nombres, ajustar las variables y las rutas a su configuración.
 | Variables del contenedor en `.env`, `command:` u otra configuración de Compose | Validar y recrear el servicio para aplicar la configuración nueva. |
 | Ruta en `traefik/dynamic/<proyecto>.yml` | Actualizar el archivo en el servidor. El provider de archivos lo detecta con `watch=true`. |
 
-### Actualizar el código y comprobar el archivo montado
+### Actualizar el código o sus credentials y comprobar el archivo montado
 
 1. Llevar los archivos nuevos a `dashboards/<proyecto>/` en el repositorio
    del servidor, mediante Git o copia de archivos. Modificar la copia de tu
@@ -165,7 +165,7 @@ usa otros nombres, ajustar las variables y las rutas a su configuración.
    sudo docker inspect "$ID_CONTENEDOR_DASHBOARD" --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
    ```
 
-3. Si solo cambió código Python, reiniciar el servicio:
+3. Si solo cambió código Python o sus credentials, reiniciar el servicio:
 
    ```bash
    sudo docker compose restart "$SERVICIO"
@@ -173,6 +173,8 @@ usa otros nombres, ajustar las variables y las rutas a su configuración.
    sudo docker compose logs --tail=80 "$SERVICIO"
 
    <!-- Ejemplo -->
+   sudo docker compose restart dashboard-chatbot-th
+   sudo docker compose ps  dashboard-chatbot-th
    sudo docker compose logs --tail=80 dashboard-chatbot-th
    ```
 
