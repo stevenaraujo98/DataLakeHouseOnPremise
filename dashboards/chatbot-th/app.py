@@ -57,6 +57,21 @@ def tabla(registros):
     return pl.DataFrame(registros, infer_schema_length=None, strict=False) if registros else pl.DataFrame()
 
 
+def preparar_usuarios_vista(datos):
+    """Mostrar el username del email y excluir las cédulas de las vistas."""
+    if datos.is_empty():
+        return datos.drop([c for c in ("usuario_cedula", "cedula") if c in datos.columns])
+    candidatos = []
+    if "email" in datos.columns:
+        candidatos.append(
+            pl.col("email").cast(pl.String).str.split("@").list.first().str.strip_chars().replace("", None)
+        )
+    if "user" in datos.columns:
+        candidatos.append(pl.col("user").cast(pl.String).str.strip_chars().replace("", None))
+    datos = datos.with_columns(pl.coalesce([*candidatos, pl.lit("Sin usuario")]).alias("user"))
+    return datos.drop([c for c in ("usuario_cedula", "cedula") if c in datos.columns])
+
+
 def numero(valor, decimales=0, sufijo=""):
     if valor is None or not math.isfinite(float(valor)):
         return "Sin dato"
@@ -174,12 +189,8 @@ def vista_resumen(metricas, actividad, top_n):
         ])
         barra(sentimientos, "sentimiento", "interacciones", "Sentimiento de los usuarios")
     with derecha:
-        usuarios = tabla(metricas.get("top_usuarios_detalle", []))
-        if usuarios.is_empty():
-            usuarios = tabla([
-                {"usuario_cedula": str(k), "interacciones": v} for k, v in metricas.get("top_usuarios", {}).items()
-            ])
-        barra(usuarios, "usuario_cedula", "interacciones", "Usuarios más activos · histórico", top_n)
+        usuarios = preparar_usuarios_vista(tabla(metricas.get("top_usuarios_detalle", [])))
+        barra(usuarios, "user", "interacciones", "Usuarios más activos · histórico", top_n)
     with st.expander("Ver actividad diaria y ranking de usuarios"):
         st.dataframe(actividad, width="stretch", hide_index=True)
         st.dataframe(usuarios.head(top_n), width="stretch", hide_index=True)
@@ -261,23 +272,23 @@ def vista_rendimiento(metricas, actividad, top_n):
     )
     st.divider()
     modos = {
-        "Sesión más lenta por usuario": ("sesion_mas_lenta_por_usuario", "usuario_cedula", "tiempo_modelo_total_s"),
+        "Sesión más lenta por usuario": ("sesion_mas_lenta_por_usuario", "user", "tiempo_modelo_total_s"),
         "Sesiones por tiempo acumulado del modelo": ("top_sesiones_tiempo_modelo", "session_id", "tiempo_modelo_total_s"),
         "Sesiones por duración de reloj": ("top_sesiones_duracion", "session_id", "duracion_min"),
     }
     modo = st.selectbox("Ranking de sesiones · histórico", list(modos), key="ranking_sesiones")
     clave, etiqueta, valor = modos[modo]
-    sesiones = tabla(metricas.get(clave, []))
+    sesiones = preparar_usuarios_vista(tabla(metricas.get(clave, [])))
     barra(
         sesiones, etiqueta, valor,
         "Duración de sesión (min)" if valor == "duracion_min" else "Tiempo acumulado del modelo por sesión (s)",
-        top_n, hover=("usuario_cedula", "session_id", "interacciones", "latencia_max_ms", "duracion_min"),
+        top_n, hover=("user", "session_id", "interacciones", "latencia_max_ms", "duracion_min"),
     )
     st.caption("Tiempo acumulado del modelo: suma de latencias válidas. Duración de reloj: del primer mensaje a la última respuesta o mensaje; incluye pausas del usuario y puede abarcar varios días.")
     with st.expander("Ver sesiones y respuestas más lentas"):
-        campos = ["usuario_cedula", "session_id", "interacciones", "respuestas", "tiempo_modelo_total_s", "latencia_max_ms", "duracion_min"]
+        campos = ["user", "session_id", "interacciones", "respuestas", "tiempo_modelo_total_s", "latencia_max_ms", "duracion_min"]
         st.dataframe(sesiones.select([c for c in campos if c in sesiones.columns]).head(top_n), width="stretch", hide_index=True)
-        st.dataframe(tabla(metricas.get("respuestas_mas_lentas", [])).head(top_n), width="stretch", hide_index=True)
+        st.dataframe(preparar_usuarios_vista(tabla(metricas.get("respuestas_mas_lentas", []))).head(top_n), width="stretch", hide_index=True)
 
 
 def vista_incidencias(metricas, periodo):
@@ -327,11 +338,11 @@ def vista_detalle(metricas):
         st.info("No hay conversaciones disponibles.")
         return
 
-    usuarios = sorted(mensajes["usuario_cedula"].drop_nulls().cast(pl.String).unique().to_list())
-    mensajes = mensajes.with_columns(pl.col("usuario_cedula").cast(pl.String))
+    mensajes = preparar_usuarios_vista(mensajes)
+    usuarios = sorted(mensajes["user"].drop_nulls().unique().to_list())
     elegidos = st.multiselect("Usuarios", usuarios, key="detalle_usuarios")
     if elegidos:
-        mensajes = mensajes.filter(pl.col("usuario_cedula").is_in(elegidos))
+        mensajes = mensajes.filter(pl.col("user").is_in(elegidos))
     tipos = {"Todas": None, "Sin respuesta": "hay_respuesta", "Con incidencia": "tiene_incidencia", "Con herramientas": "usa_tool"}
     tipos = {k: v for k, v in tipos.items() if v is None or v in mensajes.columns}
     tipo = st.selectbox("Interacciones", list(tipos), key="detalle_tipo")
@@ -348,7 +359,7 @@ def vista_detalle(metricas):
         mensajes = mensajes.sort("created_at", descending=True, nulls_last=True)
     limite = st.select_slider("Filas a mostrar", options=[50, 100, 200, 500, 1000, 2000], value=200, key="detalle_limite")
     campos = [
-        "created_at", "usuario_cedula", "session_id", "alias_sesion", "content",
+        "created_at", "user", "session_id", "alias_sesion", "content",
         "respuesta_ia", "hay_respuesta", "response_latency_s", "sentiment", "usa_tool", "tools", "error",
     ]
     visible = mensajes.select([c for c in campos if c in mensajes.columns])
