@@ -284,11 +284,21 @@ prefect deployment schedule resume 'mi-flow/mi-flow-prod' <schedule_id>
 ## 9. Actualicé el script — ¿cómo aplico el cambio?
 
 - **Solo cambiaste la lógica interna** (mismo archivo, misma función `@flow`,
-  mismos parámetros, **en la misma ruta desde donde ya deployaste** — ver
+  mismo `name` del decorador, mismos parámetros, **en la misma ruta desde donde ya deployaste** — ver
   el aviso del paso 4 sobre `/flows/org` vs `/flows/users/...`): no hace
   falta re-deployar. El worker lee el `.py` desde disco (bind mount) en cada
   ejecución nueva, así que el próximo run — manual o programado — ya usa el
-  código actualizado. Basta con guardar el archivo.
+  código actualizado. Esto también incluye **agregar funciones auxiliares o
+  nuevas `@task` llamadas desde el flow principal**, y cambiar
+  **`version="..."` en el decorador `@flow`**. Basta con guardar o subir los
+  archivos actualizados a la ruta del servidor que usa el deployment; no
+  necesitas reiniciar el worker. Los módulos nuevos deben estar disponibles
+  en las rutas que ve el worker y sus dependencias deben estar instaladas en
+  su imagen (instalarlas solo en el notebook no las instala en el worker).
+  Las ejecuciones que ya están en curso continúan con el código que cargaron
+  al iniciar. La versión del decorador se reporta al ejecutar el flow; para
+  actualizar también la versión registrada en el deployment, vuelve a
+  desplegar.
 - **Cambiaste el nombre de la función `@flow`, el nombre del archivo, la
   ruta desde donde se deploya, los parámetros que recibe, o quieres
   actualizar nombre/descripción/tags del deployment**: vuelve a correr el
