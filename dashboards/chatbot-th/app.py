@@ -16,6 +16,7 @@ from common.auth import login_gate
 BUCKET = "processed-data"
 METRICS_KEY = "gold/th/chatbot/metrics.json"
 MENSAJES_KEY = "gold/th/chatbot/mensajes.parquet"
+CAPACIDAD_SUPERADA_KEY = "gold/th/chatbot/capacidad_superada.parquet"
 INCIDENCIAS = {
     "error_model": "Error del modelo",
     "Limitante": "Limitante",
@@ -46,6 +47,12 @@ def cargar_metricas():
 def cargar_mensajes(generado_en):
     # La generación forma parte de la clave de caché: un JSON nuevo renueva el detalle.
     obj = get_s3_client().get_object(Bucket=BUCKET, Key=MENSAJES_KEY)
+    return pl.read_parquet(io.BytesIO(obj["Body"].read()))
+
+
+@st.cache_data(ttl=300, max_entries=4)
+def cargar_capacidad_superada(generado_en):
+    obj = get_s3_client().get_object(Bucket=BUCKET, Key=CAPACIDAD_SUPERADA_KEY)
     return pl.read_parquet(io.BytesIO(obj["Body"].read()))
 
 
@@ -291,7 +298,7 @@ def vista_rendimiento(metricas, actividad, top_n):
         st.dataframe(preparar_usuarios_vista(tabla(metricas.get("respuestas_mas_lentas", []))).head(top_n), width="stretch", hide_index=True)
 
 
-def vista_incidencias(metricas, periodo):
+def vista_incidencias(metricas, periodo, role):
     conteos = metricas.get("incidencias_counts", {})
     for columna, (tipo, etiqueta) in zip(st.columns(3), INCIDENCIAS.items()):
         columna.metric(etiqueta, numero(conteos.get(tipo, 0)))
@@ -313,12 +320,189 @@ def vista_incidencias(metricas, periodo):
     else:
         st.info("No hay incidencias diarias en el rango seleccionado.")
     linea_diaria(diarias, ["tasa_incidencias_pct"], "Porcentaje diario de interacciones con incidencia")
+    capacidad = metricas.get("capacidad_superada_explicita")
+    if capacidad is not None:
+        st.metric("Respuestas explícitas de capacidad superada · histórico", numero(capacidad.get("total_interacciones")))
+        st.caption(
+            "El chat respondió «¡Vaya! Aún estoy aprendiendo…» y derivó la consulta a una persona. "
+            "Este conteo es independiente de Limitante y de las interacciones sin respuesta. "
+            "Los administradores pueden revisar las preguntas en la vista Preguntas sin resolver."
+        )
     with st.expander("Calidad y cobertura de los datos · histórico"):
         calidad = tabla([
             {"control": k.replace("_", " ").capitalize(), "cantidad": v}
             for k, v in metricas.get("calidad_datos", {}).items()
         ])
         st.dataframe(calidad, width="stretch", hide_index=True)
+    if role == "admin":
+        st.divider()
+        vista_detalle_incidencias(metricas)
+
+
+def vista_detalle_incidencias(metricas):
+    st.subheader("Mensajes y conversaciones con incidencia · solo administradores")
+    st.caption(
+        "Histórico completo. El mensaje del usuario es la consulta asociada a la respuesta "
+        "que registró la incidencia. Selecciona un caso para revisar el contexto de su sesión."
+    )
+    try:
+        mensajes = cargar_mensajes(metricas.get("generado_en", ""))
+    except ClientError as error:
+        if es_ausente(error):
+            st.info("Publica mensajes.parquet desde el notebook actualizado para consultar las incidencias.")
+        else:
+            st.error("No se pudo leer el detalle de incidencias en MinIO. Revisa los permisos del servicio.")
+        return
+    except BotoCoreError:
+        st.error("No se pudo conectar con MinIO para leer las incidencias.")
+        return
+
+    requeridas = {"content", "respuesta_ia", "session_id", *INCIDENCIAS}
+    if not requeridas.issubset(mensajes.columns):
+        st.info("Vuelve a publicar mensajes.parquet desde el notebook actualizado para incluir el detalle por tipo de incidencia.")
+        return
+    tipo = st.selectbox(
+        "Tipo de incidencia", ["Todas", *INCIDENCIAS],
+        format_func=lambda x: INCIDENCIAS.get(x, x), key="incidencias_tipo",
+    )
+    condicion = pl.lit(False)
+    for incidencia in INCIDENCIAS:
+        if tipo == "Todas" or tipo == incidencia:
+            condicion = condicion | pl.col(incidencia).fill_null(False)
+    casos = mensajes.filter(condicion)
+    buscar = st.text_input("Buscar en mensajes y respuestas con incidencia", key="incidencias_buscar").strip()
+    if buscar:
+        casos = casos.filter(
+            pl.col("content").fill_null("").str.to_lowercase().str.contains(buscar.lower(), literal=True)
+            | pl.col("respuesta_ia").fill_null("").str.to_lowercase().str.contains(buscar.lower(), literal=True)
+        )
+    if casos.is_empty():
+        st.info("No hay incidencias que coincidan con la selección.")
+        return
+    if "created_at" in casos.columns:
+        casos = casos.sort("created_at", descending=True, nulls_last=True)
+    campos = ["id", "created_at", "user", "session_id", "content", "respuesta_ia", "response_created_at", "error", *INCIDENCIAS]
+    configuracion = {
+        "content": st.column_config.TextColumn("Mensaje del usuario", width="large"),
+        "respuesta_ia": st.column_config.TextColumn("Respuesta del chat", width="large"),
+        "created_at": "Fecha del mensaje",
+        "response_created_at": "Fecha de la respuesta",
+    }
+    visibles = preparar_usuarios_vista(casos)
+    visibles = visibles.select([c for c in campos if c in visibles.columns])
+    st.caption(f"{numero(casos.height)} interacciones con incidencia. Cada fila conserva la pregunta y su respuesta.")
+    st.dataframe(visibles, width="stretch", hide_index=True, column_config=configuracion)
+    st.download_button(
+        "Descargar incidencias (CSV)", data=visibles.write_csv(),
+        file_name="chatbot_th_incidencias.csv", mime="text/csv", key="descargar_incidencias",
+    )
+    etiquetas = [
+        f"{i + 1} · {fila.get('created_at') or 'Sin fecha'} · {fila.get('user') or 'Sin usuario'} · "
+        + shorten(fila.get("content") or "Sin texto", width=100, placeholder="…")
+        for i, fila in enumerate(visibles.iter_rows(named=True))
+    ]
+    indice = st.selectbox(
+        "Incidencia para ver la conversación", list(range(casos.height)),
+        format_func=lambda i: etiquetas[i], key="incidencia_contexto",
+    )
+    seleccion = casos.row(indice, named=True)
+    st.markdown("**Mensaje que recibió la respuesta con incidencia**")
+    st.text(seleccion.get("content") or "Sin texto")
+    st.markdown("**Respuesta asociada**")
+    st.text(seleccion.get("respuesta_ia") or "Sin respuesta registrada")
+    sesion = seleccion.get("session_id")
+    if sesion is None or not str(sesion).strip():
+        st.info("Este registro no tiene sesión identificada; no es posible reconstruir su conversación.")
+        return
+    contexto = mensajes.filter(pl.col("session_id") == sesion)
+    # Una sesión mal reutilizada no debe mezclar las conversaciones de dos personas.
+    if "usuario_cedula" in contexto.columns:
+        usuario = seleccion.get("usuario_cedula")
+        contexto = contexto.filter(
+            pl.col("usuario_cedula").is_null() if usuario is None else pl.col("usuario_cedula") == usuario
+        )
+    if "created_at" in contexto.columns:
+        contexto = contexto.sort("created_at", nulls_last=True, maintain_order=True)
+    contexto = preparar_usuarios_vista(contexto)
+    st.markdown("**Conversación de la sesión seleccionada**")
+    st.caption(
+        "Incluye las interacciones anteriores y posteriores disponibles en el histórico, en orden cronológico. "
+        "Si el histórico está recortado, la conversación puede estar incompleta. "
+        "Los filtros de tipo y búsqueda no recortan este contexto."
+    )
+    st.dataframe(
+        contexto.select([c for c in campos if c in contexto.columns]),
+        width="stretch", hide_index=True, column_config=configuracion,
+    )
+
+
+def vista_capacidad_superada(metricas, top_n):
+    st.subheader("Preguntas sin resolver · solo administradores")
+    st.caption(
+        "Consultas que recibieron el mensaje explícito «¡Vaya! Aún estoy aprendiendo y esta pregunta "
+        "supera mis capacidades actuales…». Revisa estos casos para ampliar el conocimiento del chatbot. "
+        "La pregunta y su respuesta corresponden a la asociación registrada en el histórico."
+    )
+    resumen = metricas.get("capacidad_superada_explicita")
+    if resumen is None:
+        st.info("Publica los resultados del notebook 2_analysis.ipynb actualizado para habilitar esta vista.")
+        return
+    st.metric("Consultas con capacidad superada · histórico", numero(resumen.get("total_interacciones")))
+    st.caption("Este estado se detecta por el texto explícito de la respuesta y se consulta por separado de Limitante.")
+    try:
+        casos = cargar_capacidad_superada(metricas.get("generado_en", ""))
+    except ClientError as error:
+        if es_ausente(error):
+            st.info("Publica capacidad_superada.parquet desde el notebook actualizado para consultar las preguntas.")
+        else:
+            st.error("No se pudo leer el detalle de capacidad superada en MinIO. Revisa los permisos del servicio.")
+        return
+    except BotoCoreError:
+        st.error("No se pudo conectar con MinIO para leer las preguntas pendientes.")
+        return
+    if casos.is_empty():
+        st.info("No se encontraron respuestas con el mensaje explícito de capacidad superada en el histórico publicado.")
+        return
+    if not {"pregunta_usuario", "respuesta_ia"}.issubset(casos.columns):
+        st.error("El detalle no contiene las preguntas y respuestas esperadas. Vuelve a publicarlo desde el notebook actualizado.")
+        return
+
+    casos = preparar_usuarios_vista(casos)
+    usuarios = sorted(casos["user"].drop_nulls().unique().to_list())
+    elegidos = st.multiselect("Usuarios", usuarios, key="capacidad_usuarios")
+    if elegidos:
+        casos = casos.filter(pl.col("user").is_in(elegidos))
+    buscar = st.text_input("Buscar en preguntas y respuestas", key="capacidad_buscar").strip()
+    if buscar:
+        casos = casos.filter(
+            pl.col("pregunta_usuario").fill_null("").str.to_lowercase().str.contains(buscar.lower(), literal=True)
+            | pl.col("respuesta_ia").fill_null("").str.to_lowercase().str.contains(buscar.lower(), literal=True)
+        )
+    if casos.is_empty():
+        st.info("No hay preguntas que coincidan con los filtros.")
+        return
+
+    preguntas = casos.group_by("pregunta_usuario").agg(pl.len().alias("interacciones"))
+    barra(preguntas, "pregunta_usuario", "interacciones", "Preguntas que el chat declaró no poder responder", top_n)
+    st.caption("El gráfico usa los filtros de esta vista y agrupa preguntas con texto idéntico. El detalle y la descarga incluyen todas las coincidencias.")
+    if "created_at" in casos.columns:
+        casos = casos.sort("created_at", descending=True, nulls_last=True)
+    campos = ["id", "created_at", "user", "session_id", "pregunta_usuario", "respuesta_ia", "response_created_at", "Limitante"]
+    visible = casos.select([c for c in campos if c in casos.columns])
+    st.caption(f"{numero(casos.height)} consultas encontradas. Abre una celda para leer el texto completo.")
+    st.dataframe(
+        visible, width="stretch", hide_index=True,
+        column_config={
+            "pregunta_usuario": st.column_config.TextColumn("Pregunta del usuario", width="large"),
+            "respuesta_ia": st.column_config.TextColumn("Respuesta del chat", width="large"),
+            "created_at": "Fecha de la pregunta",
+            "response_created_at": "Fecha de la respuesta",
+        },
+    )
+    st.download_button(
+        "Descargar preguntas y respuestas (CSV)", data=visible.write_csv(),
+        file_name="chatbot_th_preguntas_sin_resolver.csv", mime="text/csv", key="descargar_capacidad",
+    )
 
 
 def vista_detalle(metricas):
@@ -343,7 +527,10 @@ def vista_detalle(metricas):
     elegidos = st.multiselect("Usuarios", usuarios, key="detalle_usuarios")
     if elegidos:
         mensajes = mensajes.filter(pl.col("user").is_in(elegidos))
-    tipos = {"Todas": None, "Sin respuesta": "hay_respuesta", "Con incidencia": "tiene_incidencia", "Con herramientas": "usa_tool"}
+    tipos = {
+        "Todas": None, "Sin respuesta": "hay_respuesta", "Con incidencia": "tiene_incidencia",
+        "Con herramientas": "usa_tool", "Capacidad superada explícita": "capacidad_superada_explicita",
+    }
     tipos = {k: v for k, v in tipos.items() if v is None or v in mensajes.columns}
     tipo = st.selectbox("Interacciones", list(tipos), key="detalle_tipo")
     if tipos[tipo]:
@@ -360,7 +547,7 @@ def vista_detalle(metricas):
     limite = st.select_slider("Filas a mostrar", options=[50, 100, 200, 500, 1000, 2000], value=200, key="detalle_limite")
     campos = [
         "created_at", "user", "session_id", "alias_sesion", "content",
-        "respuesta_ia", "hay_respuesta", "response_latency_s", "sentiment", "usa_tool", "tools", "error",
+        "respuesta_ia", "hay_respuesta", "capacidad_superada_explicita", "response_latency_s", "sentiment", "usa_tool", "tools", "error",
     ]
     visible = mensajes.select([c for c in campos if c in mensajes.columns])
     st.caption(f"{numero(mensajes.height)} coincidencias · mostrando {numero(min(limite, mensajes.height))} filas. La búsqueda abarca todo el histórico.")
@@ -386,6 +573,7 @@ def main():
     if st.sidebar.button("Actualizar datos", key="actualizar_datos"):
         cargar_metricas.clear()
         cargar_mensajes.clear()
+        cargar_capacidad_superada.clear()
     try:
         metricas = cargar_metricas()
     except ClientError as error:
@@ -413,7 +601,7 @@ def main():
 
     vistas = ["Resumen", "Conversaciones", "Herramientas", "Rendimiento", "Incidencias"]
     if role == "admin":
-        vistas.append("Detalle")
+        vistas.extend(["Preguntas sin resolver", "Detalle"])
     vista = st.sidebar.radio("Vista", vistas, key="vista")
     top_n = st.sidebar.slider("Elementos por ranking", 5, 20, 15, key="top_n")
     actividad = actividad_historica(metricas)
@@ -458,7 +646,9 @@ def main():
     elif vista == "Rendimiento":
         vista_rendimiento(metricas, actividad, top_n)
     elif vista == "Incidencias":
-        vista_incidencias(metricas, periodo)
+        vista_incidencias(metricas, periodo, role)
+    elif vista == "Preguntas sin resolver" and role == "admin":
+        vista_capacidad_superada(metricas, top_n)
     elif vista == "Detalle" and role == "admin":
         vista_detalle(metricas)
 
