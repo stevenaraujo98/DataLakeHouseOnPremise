@@ -14,6 +14,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from common.auth import login_gate
 
 BUCKET = "processed-data"
+APP_VERSION = "2.2"
 METRICS_KEY = "gold/th/chatbot/metrics.json"
 MENSAJES_KEY = "gold/th/chatbot/mensajes.parquet"
 CAPACIDAD_SUPERADA_KEY = "gold/th/chatbot/capacidad_superada.parquet"
@@ -570,6 +571,7 @@ def main():
     username, role = login_gate()
     st.title("Chatbot TH · Panel de analítica")
     st.caption(f"Sesión: {username} ({role})")
+    st.sidebar.caption(f"Versión del dashboard: {APP_VERSION}")
     if st.sidebar.button("Actualizar datos", key="actualizar_datos"):
         cargar_metricas.clear()
         cargar_mensajes.clear()
