@@ -433,6 +433,29 @@ services:
     networks:
       - ds_network
 
+  dashboard-pbi-canvas:
+    build: ./dashboards/pbi-canvas
+    container_name: ds_dashboard_pbi_canvas
+    restart: unless-stopped
+    command: >
+      streamlit run app.py
+      --server.address=0.0.0.0
+      --server.port=8501
+      --server.baseUrlPath=/pbi-canvas
+    volumes:
+      - ./dashboards/pbi-canvas:/app
+      - ./dashboards/common:/app/common:ro
+    environment:
+      - TZ=America/Guayaquil
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - ds_network
+
 networks:
   ds_network:
     driver: bridge

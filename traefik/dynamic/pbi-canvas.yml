@@ -1,0 +1,10 @@
+http:
+  routers:
+    pbi-canvas:
+      rule: "PathPrefix(`/pbi-canvas`)"
+      service: pbi-canvas
+  services:
+    pbi-canvas:
+      loadBalancer:
+        servers:
+          - url: "http://dashboard-pbi-canvas:8501"
