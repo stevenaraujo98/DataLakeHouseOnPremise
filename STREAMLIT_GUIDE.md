@@ -179,6 +179,8 @@ usa otros nombres, ajustar las variables y las rutas a su configuración.
    sudo docker compose logs --tail=80 "$SERVICIO"
 
    <!-- Ejemplo -->
+   sudo docker compose restart dashboard-internal
+   sudo docker compose restart dashboard-pbi-canvas
    sudo docker compose restart dashboard-chatbot-th
    sudo docker compose ps  dashboard-chatbot-th
    sudo docker compose logs --tail=80 dashboard-chatbot-th
