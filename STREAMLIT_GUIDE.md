@@ -49,7 +49,7 @@ Internet/LAN
 
 El dashboard de almacenamiento Canvas está en `dashboards/pbi-canvas` y se
 publica por Traefik en `http://SERVER_IP/pbi-canvas`. Replica las dos vistas
-de Power BI leyendo los cuatro Parquet de `processed-data/gold/PowerBI/Canvas/`.
+de Power BI leyendo los tres Parquet de `processed-data/gold/PowerBI/Canvas/`.
 Ver [su guía](dashboards/pbi-canvas/README.md) para las reglas de unión, cuotas,
 filtros y comandos de arranque.
 

@@ -1,15 +1,13 @@
 """Gold contract and calculations, independent of Streamlit and S3."""
 import math
-import re
 
 BUCKET = "processed-data"
 PREFIX = "gold/PowerBI/Canvas/"
-FILES = ("materias_e_learning", "canvas_grado", "canvas_postgrado", "cuota_asignada")
+FILES = ("materias_e_learning", "canvas", "cuota_asignada")
 CATEGORIES = ("Menos de 80%", "Entre 80% y 95%", "Superior a 95%")
 REQUIRED = {
-    "materias_e_learning": {"SIS_SOURCE_ID", "ESELEARNING", "MATERIA", "CODACAD", "TIPOMATERIA"},
-    "canvas_grado": {"course_id", "sis_source_id", "course_name", "course_code", "term_name", "quota_mb", "used_mb"},
-    "canvas_postgrado": {"course_id", "sis_source_id", "course_name", "course_code", "term_name", "quota_mb", "used_mb"},
+    "materias_e_learning": {"SIS_SOURCE_ID", "MATERIA", "CODACAD", "TIPOMATERIA"},
+    "canvas": {"course_id", "sis_source_id", "course_name", "term_name", "used_gb", "PARALELO"},
     "cuota_asignada": {"id", "storage_quota_gb"},
 }
 
@@ -57,36 +55,32 @@ def build_courses(tables):
     catalog = unique_index(tables["materias_e_learning"], "SIS_SOURCE_ID", "materias_e_learning")
     quotas = unique_index(tables["cuota_asignada"], "id", "cuota_asignada")
     result = []
-    for table, level in [("canvas_grado", "GRADO"), ("canvas_postgrado", "POSGRADO")]:
-        courses = unique_index(tables[table], "course_id", table)
-        for course_id, row in courses.items():
-            if numeric(course_id) is None or float(course_id) != int(float(course_id)):
-                raise ValueError(f"{table}: course_id inválido.")
-            meta = catalog.get(row["sis_source_id"], {})
-            quota_mb = numeric(row["quota_mb"])
-            assigned = quota_mb / 1000 if quota_mb is not None and quota_mb > 0 else None
-            source = "Canvas quota_mb" if assigned is not None else "Sin cuota"
-            # Auxiliary IDs are assumed to be grado (notebook: 42454–45768).
-            # Fill missing quotas only; never join the separate Canvas instances on ID.
-            fallback = numeric(quotas.get(course_id, {}).get("storage_quota_gb")) if level == "GRADO" else None
-            if assigned is None and fallback is not None and fallback > 0:
-                assigned, source = fallback, "cuota_asignada.storage_quota_gb"
-            used_mb = numeric(row["used_mb"])
-            used = used_mb / 1000 if used_mb is not None else None
-            percent = used / assigned * 100 if used is not None and assigned is not None else None
-            parallel = re.search(r"Paralelo\s*(\d+)", str(row["course_code"]), re.IGNORECASE)
-            kind = str(meta.get("TIPOMATERIA") or "Sin información")
-            kind = {"teorica": "Teórica", "practica": "Práctica", "teoricoPractica": "Teórico-práctica"}.get(kind, kind)
-            result.append({
-                "id": int(course_id), "nivel": level,
-                "unidad": str(meta.get("CODACAD") or ("POSGRADO" if level == "POSGRADO" else "Sin unidad")),
-                "materia": str(meta.get("MATERIA") or row["course_name"] or "Sin nombre"),
-                "paralelo": "P" + parallel.group(1) if parallel else "Sin paralelo",
-                "tipo": kind, "periodo": str(row["term_name"] or "Sin período"),
-                "assigned": assigned, "used": used, "percent": percent,
-                "estado": category(percent), "fuente_cuota": source,
-                "elearning": str(meta.get("ESELEARNING", "")).strip().upper() == "S",
-            })
+    courses = unique_index(tables["canvas"], "course_id", "canvas")
+    for course_id, row in courses.items():
+        # Inner join: membership in the already filtered gold catalog is enough.
+        # Null catalog keys are not indexed and cannot match null Canvas keys.
+        meta = catalog.get(row["sis_source_id"])
+        if meta is None:
+            continue
+        if numeric(course_id) is None or float(course_id) != int(float(course_id)):
+            raise ValueError("canvas: course_id inválido.")
+        assigned = numeric(quotas.get(course_id, {}).get("storage_quota_gb"))
+        assigned = assigned if assigned is not None and assigned > 0 else None
+        source = "cuota_asignada.storage_quota_gb" if assigned is not None else "Sin cuota"
+        used = numeric(row["used_gb"])
+        percent = used / assigned * 100 if used is not None and assigned is not None else None
+        unit = str(meta.get("CODACAD") or "Sin unidad")
+        level = "POSGRADO" if unit.strip().upper() == "POSGRADO" else "GRADO" if unit != "Sin unidad" else "Sin nivel"
+        kind = str(meta.get("TIPOMATERIA") or "Sin información")
+        kind = {"teorica": "Teórica", "practica": "Práctica", "teoricoPractica": "Teórico-práctica"}.get(kind, kind)
+        result.append({
+            "id": int(course_id), "nivel": level, "unidad": unit,
+            "materia": str(meta.get("MATERIA") or row["course_name"] or "Sin nombre"),
+            "paralelo": str(row["PARALELO"] or "Sin paralelo"),
+            "tipo": kind, "periodo": str(row["term_name"] or "Sin período"),
+            "assigned": assigned, "used": used, "percent": percent,
+            "estado": category(percent), "fuente_cuota": source,
+        })
     return result
 
 
