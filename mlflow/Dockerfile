@@ -7,6 +7,7 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir \
     "mlflow>=2.10,<3" \
+    "sqlalchemy>=2.0,<2.1" \
     psycopg2-binary \
     boto3 \
     pymysql
